@@ -100,7 +100,7 @@ button {
 
 .readout-area {
   display: grid;
-  grid-template-rows: minmax(64px, 0.28fr) minmax(170px, 0.72fr);
+  grid-template-rows: minmax(80px, 0.34fr) minmax(150px, 0.66fr);
   align-content: center;
   justify-items: center;
   gap: clamp(6px, 1.2vh, 14px);
@@ -130,12 +130,12 @@ h1 {
   min-width: 6ch;
   min-height: 0;
   color: #171717;
-  font-size: clamp(3rem, 12vh, 7.4rem);
+  font-size: clamp(2.3rem, 8.5vh, 5.6rem);
   font-weight: 720;
   letter-spacing: 0;
-  line-height: 1;
+  line-height: 1.1;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: center;
 }
 
@@ -196,7 +196,8 @@ h1 {
   justify-items: center;
   gap: 12px;
   min-height: 0;
-  overflow: hidden;
+  /* No overflow clip here so the piano drop shadow can render; the app-shell still clips at the
+     window edge, so this does not introduce scrollbars. */
 }
 
 .piano {
@@ -209,7 +210,8 @@ h1 {
   border: 1px solid #1f1f1f;
   border-radius: 6px;
   background: #151515;
-  box-shadow: 0 18px 42px rgba(25, 22, 18, 0.16);
+  /* Scale the drop shadow with the viewport so it tracks the rest of the responsive layout. */
+  box-shadow: 0 clamp(5px, 1.7vh, 18px) clamp(14px, 4.2vh, 42px) rgba(25, 22, 18, 0.16);
 }
 
 .white-key-row {
@@ -555,7 +557,7 @@ select {
   }
 
   h1 {
-    font-size: clamp(2.8rem, 10vh, 5.8rem);
+    font-size: clamp(2.3rem, 8vh, 4.8rem);
   }
 
   .settings-drawer {
@@ -597,12 +599,12 @@ select {
   }
 
   .readout-area {
-    grid-template-rows: minmax(46px, 0.22fr) minmax(186px, 0.78fr);
+    grid-template-rows: minmax(72px, 0.26fr) minmax(170px, 0.74fr);
     gap: 2px;
   }
 
   h1 {
-    font-size: clamp(2.4rem, 10vh, 5.4rem);
+    font-size: clamp(2rem, 7.5vh, 4.2rem);
   }
 
   .alternatives {

@@ -38,10 +38,13 @@ This file is agent-facing context for future work on the live chord monitor app.
 - Chord/note display lingers after all active notes are released. Default is 500ms. Settings options are off, 250ms, 500ms, 750ms, and 1000ms. It stays solid during the hold and fades only during the final 100ms.
 - The grand staff itself should always remain visible when notation is enabled; only chord text and rendered note glyphs fade/clear.
 - StaffNotation uses `ResizeObserver` and redraws VexFlow when its container changes size. Preserve this; otherwise drag-resizing can leave stale SVG geometry that clips/obscures the staff.
-- Display logic uses a short release-settle window (`RELEASE_SETTLE_MS`, currently 60ms) before accepting release-only reductions in the displayed note set. This prevents a full chord release from briefly becoming a partial chord because one key was released milliseconds later than another. Audio and key lighting should remain immediate.
+- Display logic uses a short release-settle window (`RELEASE_SETTLE_MS`, currently 60ms) before accepting release-only reductions in the displayed note set. This prevents a full chord release from briefly becoming a partial chord because one key was released milliseconds later than another. Audio and key lighting should remain immediate. This settle/linger/fade state machine now lives in the `useDisplayNotes(activeNotes, lingerMs)` hook (`src/hooks/useDisplayNotes.ts`) and is unit-tested independently of `App`.
 - The chord readout area reserves fixed vertical space so the staff does not shift when chord text or alternatives appear/disappear.
+- The chord-name `h1` sits inside `.readout-area { overflow: hidden }`, so its box top must stay BELOW that clip edge or tall glyphs get cut off. This is font-dependent: fonts like Inter fill the em box (caps near the box top) and clip where the system fallback would not. The font-size/`vh` and `.readout-area` row split are tuned so the `h1` box top clears the clip edge by ~18-60px at every supported window size (verified by measuring `h1.getBoundingClientRect().top - readoutArea...top` across sizes). If you grow the chord font, re-check that margin.
 - Do not show "No alternate interpretations"; leave the alternatives row empty unless there are actual alternatives.
-- Settings are in a separate drawer; sound controls remain directly visible.
+- Settings are in a separate drawer; sound controls remain directly visible. The settings and help drawers are extracted presentational components (`src/components/SettingsDrawer.tsx`, `src/components/HelpDrawer.tsx`); `App` owns the state and passes value/handler props.
+- User settings (volume, mute, pressed-key names, notation on/off, chord style, inversion mode, spelling, linger) persist across restarts via `usePersistentState` (localStorage, key prefix `lcm:`). Visible-range/computer-octave view state is intentionally not persisted. Storage failures fall back silently to defaults.
+- The spelling control is labeled "Spelling" (not "Key") and groups options into `Sharps`/`Flats` optgroups. Spelling is intentionally a binary sharp-vs-flat choice (PRD: "C prefers sharps"); the grouping makes that behavior honest rather than implying full diatonic key-signature spelling. `SHARP_KEYS`/`FLAT_KEYS` in `notes.ts` are the single source of truth.
 - Keyboard shortcut text lives in a separate Help drawer, not in the main bottom control strip.
 - Header layout: keep the app title and MIDI input status on the top left; keep Sound, Help, and Settings controls on the top right. Do not show a separate computer-keyboard octave/status pill in the header.
 - Build command `npm run build` passes.
@@ -54,8 +57,14 @@ This file is agent-facing context for future work on the live chord monitor app.
 - Notarization is not configured yet; electron-builder skipped notarization.
 - Browser visual QA was attempted with the in-app browser, but the browser backend was unavailable in this session. Chrome automation fallback also failed to connect, even though Chrome was running and extension/native-host checks passed. Vite serving was verified with `curl`.
 - `npm audit --omit=dev` reports 0 production vulnerabilities.
-- Test suite uses Vitest + React Testing Library. `npm test` currently covers music logic, UI behavior, MIDI handling, mouse/pointer note input, release-settle/linger, staff-centering math, and responsive CSS contracts.
+- Test suite uses Vitest + React Testing Library. `npm test` currently covers music logic (including dim7 spelling, the inversion-ordinal helper, and no-redundant-add13), UI behavior, MIDI handling, mouse/pointer note input, release-settle/linger (`useDisplayNotes`), settings persistence (`usePersistentState`), Web Audio voice start/stop/mute (`usePianoAudio`, mocked AudioContext), computer-keyboard mapping and unmount release (`useComputerKeyboard`), staff-centering math, and responsive CSS contracts. 51 tests across 10 files at last run.
 - Electron minimum window size is intentionally `820x680` as a practical small-tablet-style floor. Below that, the app should not try to preserve every major region.
+- Electron hardening (`electron/main.ts`): `contextIsolation: true`, `nodeIntegration: false`, `sandbox: true`. The permission handler grants only `midi` (sysex is not requested). Web MIDI works without `experimentalFeatures`, so that flag was removed.
+- Web MIDI permission: Chromium/Electron route `navigator.requestMIDIAccess()` through the `midiSysex` permission name EVEN when the renderer requests `{ sysex: false }` (confirmed by logging `setPermissionRequestHandler`). The permission handlers must grant BOTH `midi` and `midiSysex`, or requestMIDIAccess rejects with a `SecurityError` shown as "MIDI denied". Granting `midiSysex` does not actually expose SysEx because the renderer still requests `sysex: false`. Both the request handler and check handler grant these. The `app://` scheme is `secure: true` so the renderer is a secure context (also required by Web MIDI). Do NOT "tighten" this to `midi`-only; that breaks all MIDI.
+- The preload is authored as `electron/preload.cts` so it compiles to CommonJS `dist-electron/preload.cjs` (referenced from `main.ts`). A sandboxed preload (`sandbox: true`) cannot be an ES module, and the root `package.json` `"type": "module"` would otherwise make a compiled `preload.js` ESM (fails with "Cannot use import statement outside a module"). `main.ts` stays ESM (it uses `import.meta.url`); only the preload must be CJS.
+- Production loads the renderer from a custom `app://bundle` scheme (registered privileged + `standard`/`secure`, served by `protocol.handle` from `dist/`), NOT `file://`. This is load-bearing: Vite emits absolute `/assets/...` paths and CSP `'self'` only work against a real origin. `file://` resolves `/assets/...` to the filesystem root (blank screen) and gives the document an opaque origin that `'self'` can never match (would block the bundle). Dev still uses `http://localhost:5173`.
+- The CSP is sent as a header from the `app://` protocol response. `font-src` MUST include `data:` because VexFlow embeds its music-notation fonts as `data:font/woff2` URIs; without it the staff glyphs are blocked. `style-src` needs `'unsafe-inline'` for VexFlow/SVG inline style attributes.
+- The renderer was verified under a real origin with this exact CSP via a headless browser (Vite build served over http) before packaging; still smoke-test the packaged `.app` with a MIDI device, since the test suite mocks Web MIDI/Audio and does not exercise Electron or the `app://` protocol.
 
 ## User Decisions Captured
 
@@ -127,6 +136,12 @@ type ChordCandidate = {
 Ranking should favor technically complete names. Avoid collapsing away meaningful omissions or alterations just to produce a simpler label.
 
 Ambiguous chords are normal. Return primary plus alternates.
+
+Engine specifics worth preserving:
+
+- There is no separate `add13` template: an added 13th is enharmonically a major 6th, so the `6`/`m6` templates cover it. `describeExtraInterval` returns `'6'` (not `'add13'`) for a 6/13 interval added to a triad with no seventh, which dedupes onto the `6` templates and avoids a redundant `Cadd13` twin in the alternatives. Over a seventh chord the same interval is named `add13`.
+- `dim7`'s 9-semitone interval is spelled as a diminished 7th (7th degree, e.g. `Bbb` in `Cdim7`), not a 6th. See the `dim7` branch in `degreeForInterval`.
+- Inversion-text ("full" mode) uses the exported `inversionOrdinalIndex` helper; a bass that is not actually a chord tone returns `null` and falls back to slash notation instead of being mislabeled as an inversion.
 
 ## Notation Notes
 

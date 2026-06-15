@@ -58,7 +58,8 @@ const TEMPLATES: ChordTemplate[] = [
   { id: 'add9', suffix: 'add9', fullName: 'added ninth', intervals: [0, 4, 7, 2], priority: 39, allowOmitFifth: true },
   { id: 'madd9', suffix: 'madd9', fullName: 'minor added ninth', intervals: [0, 3, 7, 2], priority: 39, allowOmitFifth: true },
   { id: 'add11', suffix: 'add11', fullName: 'added eleventh', intervals: [0, 4, 7, 5], priority: 37, allowOmitFifth: true },
-  { id: 'add13', suffix: 'add13', fullName: 'added thirteenth', intervals: [0, 4, 7, 9], priority: 37, allowOmitFifth: true },
+  // No `add13` template: an added 13th is enharmonically a major 6th, so the `6` template above already
+  // covers that voicing. A separate add13 entry would only ever surface as a redundant duplicate alternative.
   { id: 'maj', suffix: '', fullName: 'major', intervals: [0, 4, 7], priority: 30 },
   { id: 'm', suffix: 'm', fullName: 'minor', intervals: [0, 3, 7], priority: 30 },
   { id: 'dim', suffix: 'dim', fullName: 'diminished', intervals: [0, 3, 6], priority: 30 },
@@ -206,9 +207,21 @@ function formatChordName(input: {
 
   const bassInterval = normalizedInterval(input.bass - input.root);
   const chordToneOrder = input.intervals.filter((interval) => interval !== 0);
-  const inversionIndex = Math.max(1, chordToneOrder.findIndex((interval) => interval === bassInterval) + 1);
+  const inversionIndex = inversionOrdinalIndex(bassInterval, chordToneOrder);
+
+  // A bass that is not actually a chord tone (e.g. an added-tension note in the bass) has no
+  // meaningful inversion ordinal, so fall back to slash notation instead of mislabeling it.
+  if (inversionIndex === null) {
+    return `${base}/${pitchClassName(input.bass, input.preferFlats)}`;
+  }
+
   const ordinal = ORDINALS[inversionIndex] ?? `${inversionIndex}th inversion`;
   return `${base} ${ordinal}`;
+}
+
+export function inversionOrdinalIndex(bassInterval: number, chordToneIntervals: number[]): number | null {
+  const position = chordToneIntervals.findIndex((interval) => interval === bassInterval);
+  return position === -1 ? null : position + 1;
 }
 
 function applyNameStyle(suffix: string, style: ChordNameStyle): string {
@@ -232,6 +245,7 @@ function describeOmission(interval: number): string {
 }
 
 function describeExtraInterval(interval: number, template: ChordTemplate): string {
+  const hasSeventh = template.intervals.includes(10) || template.intervals.includes(11);
   if (interval === 1) return 'b9';
   if (interval === 2) return 'add9';
   if (interval === 3 && template.intervals.includes(4)) return '#9';
@@ -240,7 +254,9 @@ function describeExtraInterval(interval: number, template: ChordTemplate): strin
   if (interval === 6) return 'b5';
   if (interval === 8 && template.intervals.includes(7)) return 'b13';
   if (interval === 8) return '#5';
-  if (interval === 9) return 'add13';
+  // An added 6th over a seventh chord is a 13; over a plain triad it is just a 6 (which collapses
+  // onto the dedicated `6`/`m6` templates and avoids a redundant "add13" twin in the alternatives).
+  if (interval === 9) return hasSeventh ? 'add13' : '6';
   if (interval === 10) return 'addb7';
   if (interval === 11) return 'addmaj7';
   return '';
@@ -271,6 +287,9 @@ function degreeForInterval(interval: number, template: ChordTemplate): number {
   if (interval === 5) return 3;
   if (interval === 6 && template.suffix.includes('#11')) return 3;
   if (interval === 6 || interval === 7 || interval === 8 && !template.suffix.includes('b13')) return 4;
+  // In a diminished seventh the 9-semitone interval is a diminished 7th (7th degree, e.g. Bbb in Cdim7),
+  // not a major 6th, so it must spell up a seventh rather than a sixth.
+  if (interval === 9 && template.suffix.includes('dim7')) return 6;
   if (interval === 8 || interval === 9) return 5;
   return 6;
 }

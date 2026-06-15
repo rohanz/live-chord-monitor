@@ -42,4 +42,5 @@ The app signs with the available local Developer ID identity during packaging. N
 - `Z` shifts the computer keyboard down an octave; `X` shifts it up.
 - Default visible piano range: `C3-C6`.
 - `C4` is middle C.
-- Settings include key-based spelling. `C` is the default and prefers sharps; flat keys prefer flats.
+- Settings include a `Spelling` control grouped into Sharps/Flats. `C` is the default and prefers sharps; flat keys prefer flats.
+- Settings (sound, spelling, chord style, inversions, notation, linger) persist across restarts.

@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { detectChord } from './chords';
+import { detectChord, inversionOrdinalIndex } from './chords';
+
+describe('inversionOrdinalIndex', () => {
+  it('returns the 1-based inversion ordinal when the bass is a chord tone', () => {
+    expect(inversionOrdinalIndex(4, [4, 7])).toBe(1);
+    expect(inversionOrdinalIndex(7, [4, 7])).toBe(2);
+    expect(inversionOrdinalIndex(7, [3, 7, 10])).toBe(2);
+  });
+
+  it('returns null when the bass is not one of the chord tones', () => {
+    expect(inversionOrdinalIndex(1, [4, 7])).toBeNull();
+    expect(inversionOrdinalIndex(9, [4, 7])).toBeNull();
+  });
+});
 
 describe('detectChord', () => {
   it('returns no chord for silence', () => {
@@ -42,6 +55,13 @@ describe('detectChord', () => {
     expect(chord?.spelling[10]).toBe('Bb');
   });
 
+  it('spells a diminished seventh as a stacked seventh (Bbb), not a sixth', () => {
+    const chord = detectChord([60, 63, 66, 69], 'maj', 'slash').primary;
+
+    expect(chord?.displayName).toBe('Cdim7');
+    expect(chord?.spelling[9]).toBe('Bbb');
+  });
+
   it('uses key spelling preference for enharmonic chord roots and single notes', () => {
     expect(detectChord([61], 'maj', 'slash', false).primary?.displayName).toBe('C#');
     expect(detectChord([61], 'maj', 'slash', true).primary?.displayName).toBe('Db');
@@ -54,5 +74,13 @@ describe('detectChord', () => {
 
     expect(result.primary).not.toBeNull();
     expect(result.alternatives.length).toBeGreaterThan(0);
+  });
+
+  it('names a major-sixth voicing as a 6 chord without a redundant add13 twin', () => {
+    const result = detectChord([60, 64, 67, 69], 'maj', 'slash');
+    const names = [result.primary?.displayName, ...result.alternatives.map((candidate) => candidate.displayName)];
+
+    expect(result.primary?.displayName).toBe('C6');
+    expect(names).not.toContain('Cadd13');
   });
 });

@@ -1,20 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, CircleHelp, Music2, Settings, SlidersHorizontal, Volume2, VolumeX, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ChevronLeft, ChevronRight, CircleHelp, Music2, SlidersHorizontal, Volume2, VolumeX } from 'lucide-react';
 import { PianoKeyboard, RangeOverview } from './components/PianoKeyboard';
 import { StaffNotation } from './components/StaffNotation';
+import { SettingsDrawer } from './components/SettingsDrawer';
+import { HelpDrawer } from './components/HelpDrawer';
 import { usePianoAudio } from './audio/usePianoAudio';
 import { detectChord, type ChordNameStyle, type InversionMode } from './music/chords';
-import { clampMidiStart, keyPrefersFlats, midiNoteName, SPELLING_KEYS, type SpellingKey } from './music/notes';
+import { clampMidiStart, keyPrefersFlats, midiNoteName, type SpellingKey } from './music/notes';
 import { useComputerKeyboard } from './hooks/useComputerKeyboard';
 import { useMidiInputs } from './hooks/useMidiInputs';
+import { useDisplayNotes, FADE_OUT_MS } from './hooks/useDisplayNotes';
+import { usePersistentState } from './hooks/usePersistentState';
 
 const VISIBLE_SEMITONES = 36;
 const DEFAULT_START = 48;
 const COMPUTER_KEY_BASE = 60;
 const MIN_KEYBOARD_BASE = 36;
 const MAX_KEYBOARD_BASE = 84;
-const FADE_OUT_MS = 100;
-const RELEASE_SETTLE_MS = 60;
 const DEFAULT_VOLUME = 0.72;
 
 type HeldSources = Record<number, string[]>;
@@ -22,20 +24,19 @@ type HeldSources = Record<number, string[]>;
 export function App() {
   const [heldSources, setHeldSources] = useState<HeldSources>({});
   const [rangeStart, setRangeStart] = useState(DEFAULT_START);
-  const [volume, setVolume] = useState(DEFAULT_VOLUME);
-  const [muted, setMuted] = useState(false);
-  const [showPressedLabels, setShowPressedLabels] = useState(false);
-  const [notationEnabled, setNotationEnabled] = useState(true);
-  const [nameStyle, setNameStyle] = useState<ChordNameStyle>('maj');
-  const [inversionMode, setInversionMode] = useState<InversionMode>('slash');
-  const [spellingKey, setSpellingKey] = useState<SpellingKey>('C');
   const [computerKeyBase, setComputerKeyBase] = useState(COMPUTER_KEY_BASE);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  const [lingerMs, setLingerMs] = useState(500);
-  const [displayNotes, setDisplayNotes] = useState<number[]>([]);
-  const [displayFadeOut, setDisplayFadeOut] = useState(false);
-  const displayNotesRef = useRef<number[]>([]);
+
+  // Persisted user settings so preferences survive app restarts.
+  const [volume, setVolume] = usePersistentState('lcm:volume', DEFAULT_VOLUME);
+  const [muted, setMuted] = usePersistentState('lcm:muted', false);
+  const [showPressedLabels, setShowPressedLabels] = usePersistentState('lcm:showPressedLabels', false);
+  const [notationEnabled, setNotationEnabled] = usePersistentState('lcm:notationEnabled', true);
+  const [nameStyle, setNameStyle] = usePersistentState<ChordNameStyle>('lcm:nameStyle', 'maj');
+  const [inversionMode, setInversionMode] = usePersistentState<InversionMode>('lcm:inversionMode', 'slash');
+  const [spellingKey, setSpellingKey] = usePersistentState<SpellingKey>('lcm:spellingKey', 'C');
+  const [lingerMs, setLingerMs] = usePersistentState('lcm:lingerMs', 500);
 
   const activeNotes = useMemo(() => (
     Object.entries(heldSources)
@@ -46,53 +47,8 @@ export function App() {
 
   const activeNoteSet = useMemo(() => new Set(activeNotes), [activeNotes]);
   const preferFlats = keyPrefersFlats(spellingKey);
+  const { displayNotes, fading } = useDisplayNotes(activeNotes, lingerMs);
   const chord = useMemo(() => detectChord(displayNotes, nameStyle, inversionMode, preferFlats), [displayNotes, inversionMode, nameStyle, preferFlats]);
-
-  useEffect(() => {
-    displayNotesRef.current = displayNotes;
-  }, [displayNotes]);
-
-  useEffect(() => {
-    if (activeNotes.length > 0) {
-      setDisplayFadeOut(false);
-
-      const currentDisplayNotes = displayNotesRef.current;
-      const isReleaseOnlyChange = activeNotes.length < currentDisplayNotes.length
-        && activeNotes.every((note) => currentDisplayNotes.includes(note));
-
-      if (!isReleaseOnlyChange) {
-        setDisplayNotes(activeNotes);
-        return;
-      }
-
-      const settleTimeout = window.setTimeout(() => setDisplayNotes(activeNotes), RELEASE_SETTLE_MS);
-      return () => window.clearTimeout(settleTimeout);
-    }
-
-    if (displayNotesRef.current.length === 0) {
-      setDisplayFadeOut(false);
-      return;
-    }
-
-    if (lingerMs === 0) {
-      setDisplayFadeOut(false);
-      setDisplayNotes([]);
-      return;
-    }
-
-    setDisplayFadeOut(false);
-    const holdMs = Math.max(0, lingerMs - FADE_OUT_MS);
-    const fadeTimeout = window.setTimeout(() => setDisplayFadeOut(true), holdMs);
-    const clearTimeout = window.setTimeout(() => {
-      setDisplayFadeOut(false);
-      setDisplayNotes([]);
-    }, lingerMs);
-
-    return () => {
-      window.clearTimeout(fadeTimeout);
-      window.clearTimeout(clearTimeout);
-    };
-  }, [activeNotes, lingerMs]);
 
   const handleNoteOn = useCallback((note: number, source: string) => {
     setHeldSources((current) => {
@@ -210,7 +166,7 @@ export function App() {
 
       <section className="readout-area">
         <div
-          className={`chord-readout ${displayFadeOut ? 'is-fading' : ''}`}
+          className={`chord-readout ${fading ? 'is-fading' : ''}`}
           style={{ '--fade-duration': `${FADE_OUT_MS}ms` } as React.CSSProperties}
           aria-live="polite"
         >
@@ -224,7 +180,7 @@ export function App() {
 
         <div className="work-area">
           {notationEnabled ? (
-            <StaffNotation notes={displayNotes} chord={chord.primary} fading={displayFadeOut} />
+            <StaffNotation notes={displayNotes} chord={chord.primary} fading={fading} />
           ) : (
             <div className="notation-disabled">
               <Music2 size={22} />
@@ -269,99 +225,24 @@ export function App() {
         </div>
       </section>
 
-      {helpOpen ? (
-        <aside className="settings-drawer" aria-label="Help panel">
-          <div className="settings-title">
-            <CircleHelp size={17} />
-            <span>Help</span>
-            <button className="drawer-close" type="button" onClick={() => setHelpOpen(false)} aria-label="Close help">
-              <X size={17} />
-            </button>
-          </div>
-
-          <div className="help-section">
-            <strong>Computer keyboard</strong>
-            <p>A W S E D F T G Y H U J K O L</p>
-          </div>
-
-          <div className="help-section">
-            <strong>Octave</strong>
-            <p>Z moves down. X moves up.</p>
-          </div>
-
-          <div className="help-section">
-            <strong>MIDI</strong>
-            <p>All connected MIDI inputs are listened to automatically.</p>
-          </div>
-        </aside>
-      ) : null}
+      {helpOpen ? <HelpDrawer onClose={() => setHelpOpen(false)} /> : null}
 
       {settingsOpen ? (
-        <aside className="settings-drawer" aria-label="Settings panel">
-          <div className="settings-title">
-            <Settings size={17} />
-            <span>Settings</span>
-            <button className="drawer-close" type="button" onClick={() => setSettingsOpen(false)} aria-label="Close settings">
-              <X size={17} />
-            </button>
-          </div>
-
-          <label>
-            Chord style
-            <select value={nameStyle} onChange={(event) => setNameStyle(event.target.value as ChordNameStyle)}>
-              <option value="maj">Cmaj7</option>
-              <option value="capitalM">CM7</option>
-              <option value="delta">CΔ7</option>
-            </select>
-          </label>
-
-          <label>
-            Inversions
-            <select value={inversionMode} onChange={(event) => setInversionMode(event.target.value as InversionMode)}>
-              <option value="slash">Slash chords</option>
-              <option value="root-only">Root only</option>
-              <option value="full">Full text</option>
-            </select>
-          </label>
-
-          <label>
-            Key
-            <select value={spellingKey} onChange={(event) => setSpellingKey(event.target.value as SpellingKey)}>
-              {SPELLING_KEYS.map((key) => (
-                <option key={key} value={key}>{key}</option>
-              ))}
-            </select>
-          </label>
-
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={showPressedLabels}
-              onChange={(event) => setShowPressedLabels(event.target.checked)}
-            />
-            Pressed key names
-          </label>
-
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              checked={notationEnabled}
-              onChange={(event) => setNotationEnabled(event.target.checked)}
-            />
-            Grand staff
-          </label>
-
-          <label>
-            Linger
-            <select value={lingerMs} onChange={(event) => setLingerMs(Number(event.target.value))}>
-              <option value={0}>Off</option>
-              <option value={250}>0.25s</option>
-              <option value={500}>0.5s</option>
-              <option value={750}>0.75s</option>
-              <option value={1000}>1s</option>
-            </select>
-          </label>
-        </aside>
+        <SettingsDrawer
+          onClose={() => setSettingsOpen(false)}
+          nameStyle={nameStyle}
+          onNameStyleChange={setNameStyle}
+          inversionMode={inversionMode}
+          onInversionModeChange={setInversionMode}
+          spellingKey={spellingKey}
+          onSpellingKeyChange={setSpellingKey}
+          showPressedLabels={showPressedLabels}
+          onShowPressedLabelsChange={setShowPressedLabels}
+          notationEnabled={notationEnabled}
+          onNotationEnabledChange={setNotationEnabled}
+          lingerMs={lingerMs}
+          onLingerMsChange={setLingerMs}
+        />
       ) : null}
     </main>
   );

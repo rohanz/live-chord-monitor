@@ -1,6 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { midiToFrequency } from '../music/notes';
 
+/** Overall headroom applied on top of the user volume so stacked voices do not clip. */
+const MASTER_GAIN = 0.28;
+
 type Voice = {
   oscillators: OscillatorNode[];
   gain: GainNode;
@@ -36,7 +39,7 @@ export function usePianoAudio(activeNotes: number[], volume: number, muted: bool
     for (const voice of voicesRef.current.values()) {
       const context = voice.gain.context;
       voice.gain.gain.cancelScheduledValues(context.currentTime);
-      voice.gain.gain.setTargetAtTime(gainValue * 0.28, context.currentTime, 0.015);
+      voice.gain.gain.setTargetAtTime(gainValue * MASTER_GAIN, context.currentTime, 0.015);
     }
   }, [muted, volume]);
 
@@ -70,7 +73,7 @@ export function usePianoAudio(activeNotes: number[], volume: number, muted: bool
     const gain = context.createGain();
     const filter = context.createBiquadFilter();
     const frequency = midiToFrequency(note);
-    const level = muted ? 0 : volume * 0.28;
+    const level = muted ? 0 : volume * MASTER_GAIN;
 
     filter.type = 'lowpass';
     filter.frequency.value = 2600;

@@ -51,6 +51,7 @@ function midiMessage(data: number[], target: TestMidiInput): MIDIMessageEvent {
 describe('App', () => {
   beforeEach(() => {
     vi.useRealTimers();
+    window.localStorage.clear();
     installMidiMock();
   });
 
@@ -99,10 +100,35 @@ describe('App', () => {
 
     expect(within(settings).getByText('Chord style')).toBeInTheDocument();
     expect(within(settings).getByText('Inversions')).toBeInTheDocument();
-    expect(within(settings).getByText('Key')).toBeInTheDocument();
+    expect(within(settings).getByText('Spelling')).toBeInTheDocument();
     expect(within(settings).getByText('Pressed key names')).toBeInTheDocument();
     expect(within(settings).getByText('Grand staff')).toBeInTheDocument();
     expect(within(settings).getByText('Linger')).toBeInTheDocument();
+  });
+
+  it('groups the spelling options into Sharps and Flats so the binary behavior is visible', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    const settings = screen.getByLabelText('Settings panel');
+
+    expect(settings.querySelector('optgroup[label="Sharps"]')).toBeInTheDocument();
+    expect(settings.querySelector('optgroup[label="Flats"]')).toBeInTheDocument();
+  });
+
+  it('persists settings across app restarts', async () => {
+    const user = userEvent.setup();
+    const first = render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.selectOptions(within(screen.getByLabelText('Settings panel')).getByLabelText('Chord style'), 'delta');
+    first.unmount();
+
+    render(<App />);
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    const reopened = within(screen.getByLabelText('Settings panel')).getByLabelText('Chord style') as HTMLSelectElement;
+    expect(reopened.value).toBe('delta');
   });
 
   it('plays computer-keyboard chords immediately and maps O/L above K', () => {
@@ -146,7 +172,7 @@ describe('App', () => {
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('C#');
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
-    await user.selectOptions(within(screen.getByLabelText('Settings panel')).getByLabelText('Key'), 'F');
+    await user.selectOptions(within(screen.getByLabelText('Settings panel')).getByLabelText('Spelling'), 'F');
 
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Db');
   });
@@ -234,5 +260,26 @@ describe('App', () => {
       input.onmidimessage?.(midiMessage([0x90, 60, 0], input));
     });
     expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('C');
+  });
+
+  it('releases notes still held by a MIDI device when it disconnects', async () => {
+    const input = makeMidiInput();
+    const { access } = installMidiMock([input]);
+    const { container } = render(<App />);
+
+    await waitFor(() => expect(screen.getByText('1 MIDI input')).toBeInTheDocument());
+
+    act(() => {
+      input.onmidimessage?.(midiMessage([0x90, 60, 100], input));
+      input.onmidimessage?.(midiMessage([0x90, 64, 100], input));
+    });
+    expect(container.querySelectorAll('.white-key.is-active, .black-key.is-active').length).toBeGreaterThan(0);
+
+    // Controller unplugged without sending any note-offs.
+    act(() => {
+      input.state = 'disconnected';
+      access.onstatechange?.({ port: input as unknown as MIDIInput } as unknown as MIDIConnectionEvent);
+    });
+    expect(container.querySelectorAll('.white-key.is-active, .black-key.is-active').length).toBe(0);
   });
 });

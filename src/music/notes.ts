@@ -7,7 +7,15 @@ export type SpellingKey = 'C' | 'G' | 'D' | 'A' | 'E' | 'B' | 'F#' | 'C#' | 'F' 
 export const SPELLING_KEYS: SpellingKey[] = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#', 'F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb'];
 const FLAT_SPELLING_KEYS = new Set<SpellingKey>(['F', 'Bb', 'Eb', 'Ab', 'Db', 'Gb', 'Cb']);
 
+// Keys whose spelling prefers sharps vs flats. Spelling is intentionally a binary sharp/flat choice
+// (see PRD: "C preferring sharps"); these groupings let the UI surface that honestly.
+export const SHARP_KEYS: SpellingKey[] = SPELLING_KEYS.filter((key) => !FLAT_SPELLING_KEYS.has(key));
+export const FLAT_KEYS: SpellingKey[] = SPELLING_KEYS.filter((key) => FLAT_SPELLING_KEYS.has(key));
+
 const BLACK_PITCH_CLASSES = new Set([1, 3, 6, 8, 10]);
+
+/** MIDI note number for middle C (C4); the boundary between bass and treble clef placement. */
+export const MIDDLE_C = 60;
 
 export function midiToPitchClass(midiNote: number): PitchClass {
   return ((midiNote % 12) + 12) % 12;
@@ -28,10 +36,6 @@ export function isBlackKey(midiNote: number): boolean {
 export function pitchClassName(pitchClass: PitchClass, preferFlats = false): string {
   const names = preferFlats ? NOTE_NAMES_FLAT : NOTE_NAMES_SHARP;
   return names[midiToPitchClass(pitchClass)];
-}
-
-export function defaultPitchClassName(pitchClass: PitchClass): string {
-  return pitchClassName(pitchClass);
 }
 
 export function midiNoteName(midiNote: number, preferFlats = false): string {

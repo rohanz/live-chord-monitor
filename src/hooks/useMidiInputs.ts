@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export type MidiDeviceInfo = {
   id: string;
@@ -17,6 +17,9 @@ export function useMidiInputs(
   const [status, setStatus] = useState<MidiStatus>(() => (
     typeof navigator !== 'undefined' && navigator.requestMIDIAccess ? 'requesting' : 'unsupported'
   ));
+  // Notes each input currently has sounding, so we can release them if the device disconnects
+  // without sending its own note-offs (otherwise a held note stays stuck forever).
+  const notesByInputRef = useRef<Map<string, Set<number>>>(new Map());
 
   useEffect(() => {
     if (!navigator.requestMIDIAccess) {
@@ -26,6 +29,21 @@ export function useMidiInputs(
 
     let cancelled = false;
     let access: MIDIAccess | null = null;
+    const notesByInput = notesByInputRef.current;
+
+    function releaseInput(inputId: string) {
+      const held = notesByInput.get(inputId);
+
+      if (!held) {
+        return;
+      }
+
+      for (const note of held) {
+        onNoteOff(note, `midi:${inputId}:${note}`);
+      }
+
+      notesByInput.delete(inputId);
+    }
 
     function refreshDevices(nextAccess: MIDIAccess) {
       const inputs = Array.from(nextAccess.inputs.values());
@@ -48,8 +66,15 @@ export function useMidiInputs(
 
           if (command === 0x90 && velocity > 0) {
             onNoteOn(note, source);
+            let held = notesByInput.get(input.id);
+            if (!held) {
+              held = new Set();
+              notesByInput.set(input.id, held);
+            }
+            held.add(note);
           } else if (command === 0x80 || command === 0x90 && velocity === 0) {
             onNoteOff(note, source);
+            notesByInput.get(input.id)?.delete(note);
           }
         };
       }
@@ -64,7 +89,13 @@ export function useMidiInputs(
         access = nextAccess;
         setStatus('ready');
         refreshDevices(nextAccess);
-        nextAccess.onstatechange = () => refreshDevices(nextAccess);
+        nextAccess.onstatechange = (event) => {
+          const port = event.port;
+          if (port && port.state === 'disconnected') {
+            releaseInput(port.id);
+          }
+          refreshDevices(nextAccess);
+        };
       })
       .catch((error) => {
         console.error('Could not access MIDI devices', error);

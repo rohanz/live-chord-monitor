@@ -59,25 +59,16 @@ export function PianoKeyboard({
         ))}
       </div>
       <div className="black-key-row" aria-hidden="true">
-        {keys.filter(isBlackKey).map((note) => {
-          const precedingWhiteCount = whiteKeys.filter((whiteNote) => whiteNote < note).length;
-          const leftPercent = precedingWhiteCount / whiteKeys.length * 100;
-          const blackWidthPercent = 100 / whiteKeys.length * 0.56;
-
-          return (
+        {keys.filter(isBlackKey).map((note) => (
             <div
               key={note}
               className={`black-key ${activeNotes.has(note) ? 'is-active' : ''}`}
-              style={{
-                left: `calc(${leftPercent}% - ${blackWidthPercent / 2}%)`,
-                width: `${blackWidthPercent}%`,
-              }}
+              style={blackKeyLayout(note, whiteKeys)}
               {...pointerHandlers(note)}
             >
               {showPressedLabels && activeNotes.has(note) ? <span>{midiNoteName(note, preferFlats)}</span> : null}
             </div>
-          );
-        })}
+        ))}
       </div>
     </div>
   );
@@ -116,22 +107,13 @@ export function RangeOverview({ startNote, endNote, activeNotes }: RangeOverview
         ))}
       </div>
       <div className="mini-black-row">
-        {keys.filter(isBlackKey).map((note) => {
-          const precedingWhiteCount = whiteKeys.filter((whiteNote) => whiteNote < note).length;
-          const leftPercent = precedingWhiteCount / whiteKeys.length * 100;
-          const blackWidthPercent = 100 / whiteKeys.length * 0.56;
-
-          return (
-            <div
-              key={note}
-              className={`mini-black-key ${note >= startNote && note <= endNote ? 'is-in-range' : ''} ${activeNotes.has(note) ? 'is-active' : ''}`}
-              style={{
-                left: `calc(${leftPercent}% - ${blackWidthPercent / 2}%)`,
-                width: `${blackWidthPercent}%`,
-              }}
-            />
-          );
-        })}
+        {keys.filter(isBlackKey).map((note) => (
+          <div
+            key={note}
+            className={`mini-black-key ${note >= startNote && note <= endNote ? 'is-in-range' : ''} ${activeNotes.has(note) ? 'is-active' : ''}`}
+            style={blackKeyLayout(note, whiteKeys)}
+          />
+        ))}
       </div>
     </div>
   );
@@ -140,4 +122,16 @@ export function RangeOverview({ startNote, endNote, activeNotes }: RangeOverview
 function whiteKeyPosition(note: number, whiteKeys: number[]): number {
   const preceding = whiteKeys.filter((whiteNote) => whiteNote < note).length;
   return preceding / whiteKeys.length * 100;
+}
+
+/** Horizontal placement (as CSS percentages) for a black key floating above the white-key row. */
+function blackKeyLayout(note: number, whiteKeys: number[]): { left: string; width: string } {
+  const precedingWhiteCount = whiteKeys.filter((whiteNote) => whiteNote < note).length;
+  const leftPercent = precedingWhiteCount / whiteKeys.length * 100;
+  const blackWidthPercent = 100 / whiteKeys.length * 0.56;
+
+  return {
+    left: `calc(${leftPercent}% - ${blackWidthPercent / 2}%)`,
+    width: `${blackWidthPercent}%`,
+  };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Accidental, Renderer, Stave, StaveConnector, StaveNote, TickContext } from 'vexflow';
 import type { ChordCandidate } from '../music/chords';
-import { midiToOctave, midiToPitchClass } from '../music/notes';
+import { MIDDLE_C, midiToOctave, midiToPitchClass, pitchClassName } from '../music/notes';
 
 type StaffNotationProps = {
   notes: number[];
@@ -84,8 +84,8 @@ export function StaffNotation({ notes, chord, fading }: StaffNotationProps) {
       return;
     }
 
-    const trebleNotes = notes.filter((note) => note >= 60).sort((a, b) => a - b);
-    const bassNotes = notes.filter((note) => note < 60).sort((a, b) => a - b);
+    const trebleNotes = notes.filter((note) => note >= MIDDLE_C).sort((a, b) => a - b);
+    const bassNotes = notes.filter((note) => note < MIDDLE_C).sort((a, b) => a - b);
 
     drawChord(trebleNotes, 'treble', treble, width, chord);
     drawChord(bassNotes, 'bass', bass, width, chord);
@@ -129,7 +129,8 @@ function drawChord(notes: number[], clef: 'treble' | 'bass', stave: Stave, width
 
 function midiToVexKey(note: number, chord: ChordCandidate | null): VexKey {
   const pitchClass = midiToPitchClass(note);
-  const spelled = chord?.spelling[pitchClass] ?? fallbackSpelling(pitchClass);
+  // Without chord context, fall back to flat spelling (matches conventional accidental display).
+  const spelled = chord?.spelling[pitchClass] ?? pitchClassName(pitchClass, true);
   const match = spelled.match(/^([A-G])([b#]{0,2})$/);
   const octave = midiToOctave(note);
 
@@ -141,8 +142,4 @@ function midiToVexKey(note: number, chord: ChordCandidate | null): VexKey {
     key: `${match[1].toLowerCase()}/${octave}`,
     accidental: match[2] || null,
   };
-}
-
-function fallbackSpelling(pitchClass: number): string {
-  return ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'][pitchClass];
 }
