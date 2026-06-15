@@ -232,7 +232,6 @@ h1 {
   color: #4f4a43;
   font-size: 0.76rem;
   font-weight: 700;
-  box-shadow: inset 0 -8px 0 rgba(0, 0, 0, 0.035);
   cursor: pointer;
   touch-action: none;
   user-select: none;
@@ -245,7 +244,6 @@ h1 {
 .white-key.is-active {
   background: #d63b35;
   color: #fff8f5;
-  box-shadow: inset 0 -8px 0 rgba(0, 0, 0, 0.08);
 }
 
 .black-key-row {
@@ -269,7 +267,6 @@ h1 {
   font-size: 0.7rem;
   font-weight: 700;
   z-index: 2;
-  box-shadow: inset 0 -5px 0 rgba(255, 255, 255, 0.06);
   cursor: pointer;
   pointer-events: auto;
   touch-action: none;
