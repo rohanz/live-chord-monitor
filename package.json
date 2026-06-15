@@ -1,0 +1,51 @@
+{
+  "name": "live-chord-monitor",
+  "version": "0.1.0",
+  "description": "A macOS Electron app for live MIDI and computer-keyboard chord monitoring.",
+  "author": "Rohan",
+  "private": true,
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"tsc -p electron/tsconfig.json --watch --preserveWatchOutput\" \"wait-on tcp:5173 dist-electron/main.js && electron .\"",
+    "build": "tsc -b && vite build && tsc -p electron/tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "preview": "vite preview",
+    "dist:mac": "npm run build && electron-builder --mac"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vexflow": "^5.0.0"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.5.2",
+    "concurrently": "^8.2.2",
+    "electron": "^31.2.0",
+    "electron-builder": "^24.13.3",
+    "jsdom": "^29.1.1",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4",
+    "vitest": "^4.1.9",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "dev.rohan.live-chord-monitor",
+    "productName": "Live Chord Monitor",
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "mac": {
+      "category": "public.app-category.music"
+    }
+  }
+}
