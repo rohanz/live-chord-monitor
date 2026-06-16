@@ -12,8 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "preview": "vite preview",
-    "dist:mac": "npm run build && electron-builder --mac",
-    "dist:mac:release": "npm run build && NOTARIZE=1 electron-builder --mac --universal && node scripts/notarize-dmg.mjs"
+    "dist:mac": "bash scripts/dist-mac.sh",
+    "dist:mac:release": "bash scripts/dist-mac.sh release"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",
@@ -54,8 +54,7 @@
       "icon": "build/icon.icns",
       "hardenedRuntime": true,
       "entitlements": "build/entitlements.mac.plist",
-      "entitlementsInherit": "build/entitlements.mac.plist",
-      "identity": "DB24FECEEB2B761738A380122FA9557D06A42845"
+      "entitlementsInherit": "build/entitlements.mac.plist"
     }
   }
 }

@@ -3,6 +3,9 @@ dist/
 dist-electron/
 release/
 
+# Machine-local signing config (never committed)
+scripts/signing.local
+
 .DS_Store
 *.log
 npm-debug.log*
