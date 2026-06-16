@@ -150,6 +150,19 @@ describe('App', () => {
     expect(screen.getByTestId('staff')).toHaveAttribute('data-notes', '73,74');
   });
 
+  it('stops computer-keyboard notes when the setting is turned off', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('button', { name: 'Settings' }));
+    await user.click(within(screen.getByLabelText('Settings panel')).getByLabelText('Computer keyboard notes'));
+
+    fireEvent.keyDown(window, { code: 'KeyA' });
+    fireEvent.keyDown(window, { code: 'KeyD' });
+    fireEvent.keyDown(window, { code: 'KeyG' });
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('');
+  });
+
   it('plays notes by clicking piano keys with the mouse', () => {
     const { container } = render(<App />);
     const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;

@@ -37,6 +37,7 @@ export function App() {
   const [inversionMode, setInversionMode] = usePersistentState<InversionMode>('lcm:inversionMode', 'slash');
   const [spellingKey, setSpellingKey] = usePersistentState<SpellingKey>('lcm:spellingKey', 'C');
   const [lingerMs, setLingerMs] = usePersistentState('lcm:lingerMs', 500);
+  const [computerKeyboardNotes, setComputerKeyboardNotes] = usePersistentState('lcm:computerKeyboardNotes', true);
 
   const activeNotes = useMemo(() => (
     Object.entries(heldSources)
@@ -110,7 +111,7 @@ export function App() {
   }, [shiftComputerOctave]);
 
   const midi = useMidiInputs(handleNoteOn, handleNoteOff);
-  useComputerKeyboard(true, computerKeyBase, handleNoteOn, handleNoteOff);
+  useComputerKeyboard(computerKeyboardNotes, computerKeyBase, handleNoteOn, handleNoteOff);
   usePianoAudio(activeNotes, volume, muted);
 
   const rangeEnd = rangeStart + VISIBLE_SEMITONES;
@@ -240,6 +241,8 @@ export function App() {
           onShowPressedLabelsChange={setShowPressedLabels}
           notationEnabled={notationEnabled}
           onNotationEnabledChange={setNotationEnabled}
+          computerKeyboardNotes={computerKeyboardNotes}
+          onComputerKeyboardNotesChange={setComputerKeyboardNotes}
           lingerMs={lingerMs}
           onLingerMsChange={setLingerMs}
         />

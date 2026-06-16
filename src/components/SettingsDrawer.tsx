@@ -14,6 +14,8 @@ type SettingsDrawerProps = {
   onShowPressedLabelsChange: (value: boolean) => void;
   notationEnabled: boolean;
   onNotationEnabledChange: (value: boolean) => void;
+  computerKeyboardNotes: boolean;
+  onComputerKeyboardNotesChange: (value: boolean) => void;
   lingerMs: number;
   onLingerMsChange: (value: number) => void;
 };
@@ -30,6 +32,8 @@ export function SettingsDrawer({
   onShowPressedLabelsChange,
   notationEnabled,
   onNotationEnabledChange,
+  computerKeyboardNotes,
+  onComputerKeyboardNotesChange,
   lingerMs,
   onLingerMsChange,
 }: SettingsDrawerProps) {
@@ -93,6 +97,15 @@ export function SettingsDrawer({
           onChange={(event) => onNotationEnabledChange(event.target.checked)}
         />
         Grand staff
+      </label>
+
+      <label className="checkbox-label">
+        <input
+          type="checkbox"
+          checked={computerKeyboardNotes}
+          onChange={(event) => onComputerKeyboardNotesChange(event.target.checked)}
+        />
+        Computer keyboard notes
       </label>
 
       <label>
