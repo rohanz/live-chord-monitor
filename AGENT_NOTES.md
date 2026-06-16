@@ -48,13 +48,14 @@ This file is agent-facing context for future work on the live chord monitor app.
 - Keyboard shortcut text lives in a separate Help drawer, not in the main bottom control strip.
 - Header layout: keep the app title and MIDI input status on the top left; keep Sound, Help, and Settings controls on the top right. Do not show a separate computer-keyboard octave/status pill in the header.
 - Build command `npm run build` passes.
-- macOS packaging command `npm run dist:mac` succeeds and produced:
-  - `dist/mac-arm64/Live Chord Monitor.app`
-  - `dist/Live Chord Monitor-0.1.0-arm64.dmg`
-  - `dist/Live Chord Monitor-0.1.0-arm64-mac.zip`
-- The app was signed by electron-builder using the available local Developer ID identity.
-- `codesign --verify --deep --strict` passes for `dist/mac-arm64/Live Chord Monitor.app`.
-- Notarization is not configured yet; electron-builder skipped notarization.
+- Packaging output goes to `release/` (gitignored), NOT `dist/`. `dist/` is the Vite renderer build only. This split is load-bearing: `build.files` globs `dist/**` into the asar, so if electron-builder also wrote there it would sweep its own output (incl. universal temp dirs) into the app and break the universal merge. `directories.output: "release"` keeps them separate.
+- Two build commands:
+  - `npm run dist:mac` - quick local build: signed (hardened runtime + secure timestamp, identity pinned by hash), NOT notarized, current arch. The notarize hooks no-op (NOTARIZE!=1).
+  - `npm run dist:mac:release` - distribution build: universal (`x86_64 arm64`), signed, notarized + stapled. Sets `NOTARIZE=1`, builds universal, then `scripts/notarize-dmg.mjs` notarizes+staples the dmg.
+- Signing: Developer ID Application, pinned by SHA-1 hash `DB24FECEEB2B761738A380122FA9557D06A42845` in `build.mac.identity` (there are TWO duplicate Developer ID certs in the keychain, so name is ambiguous - must pin by hash). `hardenedRuntime: true` + `build/entitlements.mac.plist` (JIT allowances Electron needs). electron-builder signs inside-out automatically.
+- Notarization: `afterSign` hook `scripts/notarize.cjs` notarizes+staples the `.app` via `@electron/notarize` using the keychain profile `apple-notary` (App Store Connect API key, account-level; override with `NOTARY_PROFILE`). `scripts/notarize-dmg.mjs` does the same for the `.dmg`. No secrets in the repo - credentials live in the keychain (the `.p8` backup is outside the repo at `~/Documents/progwork/apple-signing/`). The older `bqst-notary` (app-specific password) profile still works as a fallback.
+- Verified end-to-end: app `spctl -a -t exec` -> `accepted, source=Notarized Developer ID`; `stapler validate` passes on both app and dmg; `lipo -info` shows `x86_64 arm64`. (A `.dmg` is notarized+stapled but not code-signed, so verify it with `stapler validate`, not `spctl`.)
+- If this repo is ever made public, move the cert hash (`build.mac.identity`) and the `apple-signing` path out of committed files into a gitignored local config.
 - Browser visual QA was attempted with the in-app browser, but the browser backend was unavailable in this session. Chrome automation fallback also failed to connect, even though Chrome was running and extension/native-host checks passed. Vite serving was verified with `curl`.
 - `npm audit --omit=dev` reports 0 production vulnerabilities.
 - Test suite uses Vitest + React Testing Library. `npm test` currently covers music logic (including dim7 spelling, the inversion-ordinal helper, and no-redundant-add13), UI behavior, MIDI handling, mouse/pointer note input, release-settle/linger (`useDisplayNotes`), settings persistence (`usePersistentState`), Web Audio voice start/stop/mute (`usePianoAudio`, mocked AudioContext), computer-keyboard mapping and unmount release (`useComputerKeyboard`), staff-centering math, and responsive CSS contracts. 51 tests across 10 files at last run.

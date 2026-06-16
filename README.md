@@ -23,17 +23,19 @@ npm test
 
 ## Package For macOS
 
+Quick local build (signed, hardened runtime, not notarized; current architecture):
+
 ```sh
 npm run dist:mac
 ```
 
-Current arm64 artifacts are generated in `dist/`:
+Distribution build (universal `x86_64 arm64`, signed + notarized + stapled):
 
-- `dist/mac-arm64/Live Chord Monitor.app`
-- `dist/Live Chord Monitor-0.1.0-arm64.dmg`
-- `dist/Live Chord Monitor-0.1.0-arm64-mac.zip`
+```sh
+npm run dist:mac:release
+```
 
-The app signs with the available local Developer ID identity during packaging. Notarization is not configured yet.
+Artifacts are written to `release/` (e.g. `release/Live Chord Monitor-0.1.0-universal.dmg`). Notarization uses the `apple-notary` keychain profile (App Store Connect API key); credentials live in the macOS keychain, never in the repo. Override the profile with `NOTARY_PROFILE=<name>`.
 
 ## Controls
 
