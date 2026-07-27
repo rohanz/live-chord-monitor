@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef } from 'react';
 import type { PointerEvent } from 'react';
 import { isBlackKey, midiNoteName, midiRange } from '../music/notes';
 
@@ -23,24 +24,77 @@ export function PianoKeyboard({
   const keys = midiRange(startNote, endNote);
   const whiteKeys = keys.filter((note) => !isBlackKey(note));
 
+  // Which note each active pointer is holding. A key element can unmount mid-press
+  // (octave shift, range slider), so releases must not depend on that element still
+  // existing - hence the window-level and range-change safety nets below.
+  const pointerNotesRef = useRef(new Map<number, number>());
+  const noteOffRef = useRef(onPointerNoteOff);
+
+  useEffect(() => {
+    noteOffRef.current = onPointerNoteOff;
+  });
+
+  const releasePointer = useCallback((pointerId: number) => {
+    const note = pointerNotesRef.current.get(pointerId);
+
+    if (note === undefined) {
+      return;
+    }
+
+    pointerNotesRef.current.delete(pointerId);
+    noteOffRef.current?.(note);
+  }, []);
+
+  useEffect(() => {
+    const held = pointerNotesRef.current;
+
+    function handleWindowPointerEnd(event: globalThis.PointerEvent) {
+      releasePointer(event.pointerId);
+    }
+
+    window.addEventListener('pointerup', handleWindowPointerEnd);
+    window.addEventListener('pointercancel', handleWindowPointerEnd);
+
+    return () => {
+      window.removeEventListener('pointerup', handleWindowPointerEnd);
+      window.removeEventListener('pointercancel', handleWindowPointerEnd);
+
+      for (const note of held.values()) {
+        noteOffRef.current?.(note);
+      }
+
+      held.clear();
+    };
+  }, [releasePointer]);
+
+  // A held key that scrolls out of the visible range loses its element (and its
+  // pointer capture), so release it as soon as it disappears.
+  useEffect(() => {
+    for (const [pointerId, note] of Array.from(pointerNotesRef.current)) {
+      if (note < startNote || note > endNote) {
+        releasePointer(pointerId);
+      }
+    }
+  }, [endNote, releasePointer, startNote]);
+
   function pointerHandlers(note: number) {
     return {
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
         event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
+        // Capture keeps the press bound to the key it started on (no glissando);
+        // see the note in AGENTS.md on why drag-across is deliberately not supported.
+        event.currentTarget.setPointerCapture?.(event.pointerId);
+        pointerNotesRef.current.set(event.pointerId, note);
         onPointerNoteOn?.(note);
       },
       onPointerUp: (event: PointerEvent<HTMLElement>) => {
         event.preventDefault();
-        event.currentTarget.releasePointerCapture(event.pointerId);
-        onPointerNoteOff?.(note);
-      },
-      onPointerCancel: () => onPointerNoteOff?.(note),
-      onPointerLeave: (event: PointerEvent<HTMLElement>) => {
-        if (event.buttons > 0) {
-          onPointerNoteOff?.(note);
+        if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
         }
+        releasePointer(event.pointerId);
       },
+      onPointerCancel: (event: PointerEvent<HTMLElement>) => releasePointer(event.pointerId),
     };
   }
 

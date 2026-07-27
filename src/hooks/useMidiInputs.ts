@@ -17,9 +17,11 @@ export function useMidiInputs(
   const [status, setStatus] = useState<MidiStatus>(() => (
     typeof navigator !== 'undefined' && navigator.requestMIDIAccess ? 'requesting' : 'unsupported'
   ));
-  // Notes each input currently has sounding, so we can release them if the device disconnects
-  // without sending its own note-offs (otherwise a held note stays stuck forever).
-  const notesByInputRef = useRef<Map<string, Set<number>>>(new Map());
+  // Notes each input currently has sounding, keyed by source id (which includes the MIDI
+  // channel, so a split/layer setup sounding the same pitch on two channels refcounts as
+  // two holds). Used to release everything if the device disconnects without sending its
+  // own note-offs (otherwise a held note stays stuck forever).
+  const notesByInputRef = useRef<Map<string, Map<string, number>>>(new Map());
 
   useEffect(() => {
     if (!navigator.requestMIDIAccess) {
@@ -38,8 +40,8 @@ export function useMidiInputs(
         return;
       }
 
-      for (const note of held) {
-        onNoteOff(note, `midi:${inputId}:${note}`);
+      for (const [source, note] of held) {
+        onNoteOff(note, source);
       }
 
       notesByInput.delete(inputId);
@@ -62,19 +64,25 @@ export function useMidiInputs(
 
           const [statusByte, note, velocity] = event.data;
           const command = statusByte & 0xf0;
-          const source = `midi:${input.id}:${note}`;
+          const channel = statusByte & 0x0f;
+          const source = `midi:${input.id}:${channel}:${note}`;
 
           if (command === 0x90 && velocity > 0) {
             onNoteOn(note, source);
             let held = notesByInput.get(input.id);
             if (!held) {
-              held = new Set();
+              held = new Map();
               notesByInput.set(input.id, held);
             }
-            held.add(note);
+            held.set(source, note);
           } else if (command === 0x80 || command === 0x90 && velocity === 0) {
             onNoteOff(note, source);
-            notesByInput.get(input.id)?.delete(note);
+            notesByInput.get(input.id)?.delete(source);
+          } else if (command === 0xb0 && (note === 120 || note === 123)) {
+            // All Sound Off / All Notes Off - also the user's panic path for any note
+            // this app still thinks is held. Deliberately released across every channel
+            // of the input rather than just this one: as a panic path, broader is better.
+            releaseInput(input.id);
           }
         };
       }
@@ -98,8 +106,16 @@ export function useMidiInputs(
         };
       })
       .catch((error) => {
+        if (cancelled) {
+          return;
+        }
+
         console.error('Could not access MIDI devices', error);
-        setStatus(error instanceof DOMException && error.name === 'SecurityError' ? 'denied' : 'error');
+        // Chromium historically rejects a denied MIDI permission with SecurityError
+        // and is migrating toward NotAllowedError; treat both as "denied".
+        const denied = error instanceof DOMException
+          && (error.name === 'SecurityError' || error.name === 'NotAllowedError');
+        setStatus(denied ? 'denied' : 'error');
       });
 
     return () => {

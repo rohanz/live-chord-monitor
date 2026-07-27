@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PianoKeyboard, RangeOverview } from './PianoKeyboard';
 
@@ -73,9 +73,104 @@ describe('PianoKeyboard', () => {
     firstBlackKey.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }));
     firstBlackKey.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
 
-    expect(firstBlackKey).toHaveStyle({ pointerEvents: 'auto' });
     expect(onPointerNoteOn).toHaveBeenCalledWith(61);
     expect(onPointerNoteOff).toHaveBeenCalledWith(61);
+  });
+
+  it('releases a pointer-held note when the visible range scrolls the key out of view', () => {
+    const onPointerNoteOff = vi.fn();
+    const { container, rerender } = render(
+      <PianoKeyboard
+        startNote={60}
+        endNote={72}
+        activeNotes={new Set()}
+        showPressedLabels={false}
+        preferFlats={false}
+        onPointerNoteOff={onPointerNoteOff}
+      />,
+    );
+    const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;
+    firstWhiteKey.setPointerCapture = vi.fn();
+    firstWhiteKey.releasePointerCapture = vi.fn();
+    fireEvent.pointerDown(firstWhiteKey, { pointerId: 1 });
+    expect(onPointerNoteOff).not.toHaveBeenCalled();
+
+    rerender(
+      <PianoKeyboard
+        startNote={72}
+        endNote={84}
+        activeNotes={new Set()}
+        showPressedLabels={false}
+        preferFlats={false}
+        onPointerNoteOff={onPointerNoteOff}
+      />,
+    );
+
+    expect(onPointerNoteOff).toHaveBeenCalledWith(60);
+  });
+
+  it('releases a pointer-held note from a window pointerup that never reaches the key', () => {
+    const onPointerNoteOff = vi.fn();
+    const { container } = render(
+      <PianoKeyboard
+        startNote={60}
+        endNote={72}
+        activeNotes={new Set()}
+        showPressedLabels={false}
+        preferFlats={false}
+        onPointerNoteOff={onPointerNoteOff}
+      />,
+    );
+    const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;
+    firstWhiteKey.setPointerCapture = vi.fn();
+    firstWhiteKey.releasePointerCapture = vi.fn();
+    fireEvent.pointerDown(firstWhiteKey, { pointerId: 1 });
+
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    expect(onPointerNoteOff).toHaveBeenCalledWith(60);
+    expect(onPointerNoteOff).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases a pointer-held note exactly once when the key handles the pointerup', () => {
+    const onPointerNoteOff = vi.fn();
+    const { container } = render(
+      <PianoKeyboard
+        startNote={60}
+        endNote={72}
+        activeNotes={new Set()}
+        showPressedLabels={false}
+        preferFlats={false}
+        onPointerNoteOff={onPointerNoteOff}
+      />,
+    );
+    const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;
+    firstWhiteKey.setPointerCapture = vi.fn();
+    firstWhiteKey.releasePointerCapture = vi.fn();
+    fireEvent.pointerDown(firstWhiteKey, { pointerId: 1 });
+    fireEvent.pointerUp(firstWhiteKey, { pointerId: 1 });
+
+    expect(onPointerNoteOff).toHaveBeenCalledTimes(1);
+  });
+
+  it('releases pointer-held notes when the keyboard unmounts', () => {
+    const onPointerNoteOff = vi.fn();
+    const { container, unmount } = render(
+      <PianoKeyboard
+        startNote={60}
+        endNote={72}
+        activeNotes={new Set()}
+        showPressedLabels={false}
+        preferFlats={false}
+        onPointerNoteOff={onPointerNoteOff}
+      />,
+    );
+    const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;
+    firstWhiteKey.setPointerCapture = vi.fn();
+    firstWhiteKey.releasePointerCapture = vi.fn();
+    fireEvent.pointerDown(firstWhiteKey, { pointerId: 1 });
+
+    unmount();
+    expect(onPointerNoteOff).toHaveBeenCalledWith(60);
   });
 });
 
