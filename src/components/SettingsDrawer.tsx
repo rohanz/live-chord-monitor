@@ -1,6 +1,7 @@
 import { Settings, X } from 'lucide-react';
 import type { ChordNameStyle, InversionMode } from '../music/chords';
 import { FLAT_KEYS, SHARP_KEYS, type SpellingKey } from '../music/notes';
+import { toAccidentalGlyphs } from '../utils/accidentals';
 import { useDrawerDialog } from '../hooks/useDrawerDialog';
 import { LINGER_LABELS, LINGER_OPTIONS } from '../settings-options';
 
@@ -61,8 +62,8 @@ export function SettingsDrawer({
       <label>
         Chord style
         <select value={nameStyle} onChange={(event) => onNameStyleChange(event.target.value as ChordNameStyle)}>
-          <option value="maj">Text — Cmaj7, Cdim7, Cm7b5</option>
-          <option value="capitalM">Short — CM7, Cdim7, Cm7b5</option>
+          <option value="maj">Text — Cmaj7, Cdim7, Cm7♭5</option>
+          <option value="capitalM">Short — CM7, Cdim7, Cm7♭5</option>
           <option value="delta">Symbols — CΔ7, C°7, Cø7</option>
         </select>
       </label>
@@ -81,12 +82,12 @@ export function SettingsDrawer({
         <select value={spellingKey} onChange={(event) => onSpellingKeyChange(event.target.value as SpellingKey)}>
           <optgroup label="Sharps">
             {SHARP_KEYS.map((key) => (
-              <option key={key} value={key}>{key}</option>
+              <option key={key} value={key}>{toAccidentalGlyphs(key)}</option>
             ))}
           </optgroup>
           <optgroup label="Flats">
             {FLAT_KEYS.map((key) => (
-              <option key={key} value={key}>{key}</option>
+              <option key={key} value={key}>{toAccidentalGlyphs(key)}</option>
             ))}
           </optgroup>
         </select>

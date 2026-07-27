@@ -19,13 +19,13 @@ describe('PianoKeyboard', () => {
       <PianoKeyboard startNote={60} endNote={72} activeNotes={new Set([61])} showPressedLabels={false} preferFlats={false} />,
     );
 
-    expect(screen.queryByText('C#4')).not.toBeInTheDocument();
+    expect(screen.queryByText('C♯4')).not.toBeInTheDocument();
 
     rerender(<PianoKeyboard startNote={60} endNote={72} activeNotes={new Set([61])} showPressedLabels preferFlats={false} />);
-    expect(screen.getByText('C#4')).toBeInTheDocument();
+    expect(screen.getByText('C♯4')).toBeInTheDocument();
 
     rerender(<PianoKeyboard startNote={60} endNote={72} activeNotes={new Set([61])} showPressedLabels preferFlats />);
-    expect(screen.getByText('Db4')).toBeInTheDocument();
+    expect(screen.getByText('D♭4')).toBeInTheDocument();
   });
   it('emits pointer note-on and note-off from keys', () => {
     const onPointerNoteOn = vi.fn();

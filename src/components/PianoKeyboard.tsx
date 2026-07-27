@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { PointerEvent } from 'react';
 import { isBlackKey, midiNoteName, midiRange } from '../music/notes';
+import { toAccidentalGlyphs } from '../utils/accidentals';
 
 type PianoKeyboardProps = {
   startNote: number;
@@ -108,7 +109,7 @@ export function PianoKeyboard({
             style={{ width: `${100 / whiteKeys.length}%` }}
             {...pointerHandlers(note)}
           >
-            {showPressedLabels && activeNotes.has(note) ? <span>{midiNoteName(note, preferFlats)}</span> : null}
+            {showPressedLabels && activeNotes.has(note) ? <span>{toAccidentalGlyphs(midiNoteName(note, preferFlats))}</span> : null}
           </div>
         ))}
       </div>
@@ -120,7 +121,7 @@ export function PianoKeyboard({
               style={blackKeyLayout(note, whiteKeys)}
               {...pointerHandlers(note)}
             >
-              {showPressedLabels && activeNotes.has(note) ? <span>{midiNoteName(note, preferFlats)}</span> : null}
+              {showPressedLabels && activeNotes.has(note) ? <span>{toAccidentalGlyphs(midiNoteName(note, preferFlats))}</span> : null}
             </div>
         ))}
       </div>

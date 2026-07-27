@@ -190,7 +190,7 @@ describe('App', () => {
     fireEvent.keyUp(window, { code: 'KeyG' });
 
     fireEvent.keyDown(window, { code: 'KeyO' });
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('C#');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('C♯');
 
     fireEvent.keyDown(window, { code: 'KeyL' });
     expect(screen.getByTestId('staff')).toHaveAttribute('data-notes', '73,74');
@@ -228,12 +228,12 @@ describe('App', () => {
     render(<App />);
 
     fireEvent.keyDown(window, { code: 'KeyO' });
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('C#');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('C♯');
 
     await user.click(screen.getByRole('button', { name: 'Settings' }));
     await user.selectOptions(within(screen.getByLabelText('Settings panel')).getByLabelText('Spelling'), 'F');
 
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Db');
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('D♭');
   });
 
   it('keeps Z/X octave shortcuts working after a button has focus', async () => {

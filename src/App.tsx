@@ -11,6 +11,7 @@ import { useComputerKeyboard } from './hooks/useComputerKeyboard';
 import { useMidiInputs } from './hooks/useMidiInputs';
 import { useDisplayNotes, FADE_OUT_MS } from './hooks/useDisplayNotes';
 import { isBoolean, numberInRange, oneOf, usePersistentState } from './hooks/usePersistentState';
+import { toAccidentalGlyphs } from './utils/accidentals';
 import { isTextEntryTarget } from './utils/textEditingTarget';
 import {
   INVERSION_MODES,
@@ -212,10 +213,10 @@ export function App() {
           aria-live="polite"
           aria-atomic="true"
         >
-          <h1>{chord.primary?.displayName ?? ''}</h1>
+          <h1>{chord.primary ? toAccidentalGlyphs(chord.primary.displayName) : ''}</h1>
           <div className="alternatives">
             {chord.alternatives.length > 0
-              ? chord.alternatives.map((candidate) => candidate.displayName).join('  |  ')
+              ? chord.alternatives.map((candidate) => toAccidentalGlyphs(candidate.displayName)).join('  |  ')
               : ''}
           </div>
         </div>
@@ -246,7 +247,7 @@ export function App() {
           <button className="icon-button" type="button" onClick={() => shiftRange(-12)} aria-label="Shift visible keyboard down one octave">
             <ChevronLeft size={18} />
           </button>
-          <span className="range-end-label">{midiNoteName(rangeStart, preferFlats)}</span>
+          <span className="range-end-label">{toAccidentalGlyphs(midiNoteName(rangeStart, preferFlats))}</span>
           <div className="keyboard-range-slider">
             <RangeOverview startNote={rangeStart} endNote={rangeEnd} activeNotes={activeNoteSet} />
             <input
@@ -260,7 +261,7 @@ export function App() {
               aria-label="Visible keyboard octave range"
             />
           </div>
-          <span className="range-end-label">{midiNoteName(rangeEnd, preferFlats)}</span>
+          <span className="range-end-label">{toAccidentalGlyphs(midiNoteName(rangeEnd, preferFlats))}</span>
           <button className="icon-button" type="button" onClick={() => shiftRange(12)} aria-label="Shift visible keyboard up one octave">
             <ChevronRight size={18} />
           </button>
