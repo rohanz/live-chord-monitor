@@ -10,6 +10,13 @@ export type ChordTemplate = {
   intervals: number[];
   priority: number;
   allowOmitFifth?: boolean;
+  /** The tension this template's suffix already spells, e.g. `#11` in `7#11`. Extracted at format time
+   * so a suffix alteration and any extra alterations print as ONE ordered group (`C7(b9,#11)`, never
+   * `C7#11b9`). The `suffix` string itself deliberately keeps the alteration: the spelling rules read it. */
+  suffixAlteration?: string;
+  /** Scale-degree overrides (interval -> 0-based degree) for templates whose spelling the suffix-sniffing
+   * defaults in `degreeForInterval` cannot infer, e.g. `7alt`, whose 3 is a #9 and whose 8 is a b13. */
+  degreeOverrides?: Record<number, number>;
 };
 
 export type ChordCandidate = {
@@ -34,20 +41,38 @@ const TEMPLATES: ChordTemplate[] = [
   { id: '13', suffix: '13', fullName: 'dominant thirteenth', intervals: [0, 4, 7, 10, 2, 5, 9], priority: 72, allowOmitFifth: true },
   { id: 'maj13', suffix: 'maj13', fullName: 'major thirteenth', intervals: [0, 4, 7, 11, 2, 5, 9], priority: 72, allowOmitFifth: true },
   { id: 'm13', suffix: 'm13', fullName: 'minor thirteenth', intervals: [0, 3, 7, 10, 2, 5, 9], priority: 72, allowOmitFifth: true },
+  { id: '13sus4', suffix: '13sus4', fullName: 'dominant thirteenth suspended fourth', intervals: [0, 5, 7, 10, 2, 9], priority: 66, allowOmitFifth: true },
   { id: '11', suffix: '11', fullName: 'dominant eleventh', intervals: [0, 4, 7, 10, 2, 5], priority: 64, allowOmitFifth: true },
   { id: 'maj11', suffix: 'maj11', fullName: 'major eleventh', intervals: [0, 4, 7, 11, 2, 5], priority: 64, allowOmitFifth: true },
   { id: 'm11', suffix: 'm11', fullName: 'minor eleventh', intervals: [0, 3, 7, 10, 2, 5], priority: 64, allowOmitFifth: true },
   { id: '9', suffix: '9', fullName: 'dominant ninth', intervals: [0, 4, 7, 10, 2], priority: 56, allowOmitFifth: true },
   { id: 'maj9', suffix: 'maj9', fullName: 'major ninth', intervals: [0, 4, 7, 11, 2], priority: 56, allowOmitFifth: true },
   { id: 'm9', suffix: 'm9', fullName: 'minor ninth', intervals: [0, 3, 7, 10, 2], priority: 56, allowOmitFifth: true },
-  { id: '7b9', suffix: '7b9', fullName: 'dominant flat ninth', intervals: [0, 4, 7, 10, 1], priority: 55, allowOmitFifth: true },
-  { id: '7#9', suffix: '7#9', fullName: 'dominant sharp ninth', intervals: [0, 4, 7, 10, 3], priority: 55, allowOmitFifth: true },
-  { id: '7#11', suffix: '7#11', fullName: 'dominant sharp eleventh', intervals: [0, 4, 7, 10, 6], priority: 55, allowOmitFifth: true },
-  { id: '7b13', suffix: '7b13', fullName: 'dominant flat thirteenth', intervals: [0, 4, 7, 10, 8], priority: 55, allowOmitFifth: true },
+  { id: '7b9', suffix: '7b9', suffixAlteration: 'b9', fullName: 'dominant flat ninth', intervals: [0, 4, 7, 10, 1], priority: 55, allowOmitFifth: true },
+  { id: '7#9', suffix: '7#9', suffixAlteration: '#9', fullName: 'dominant sharp ninth', intervals: [0, 4, 7, 10, 3], priority: 55, allowOmitFifth: true },
+  { id: '7#11', suffix: '7#11', suffixAlteration: '#11', fullName: 'dominant sharp eleventh', intervals: [0, 4, 7, 10, 6], priority: 55, allowOmitFifth: true },
+  { id: '7b13', suffix: '7b13', suffixAlteration: 'b13', fullName: 'dominant flat thirteenth', intervals: [0, 4, 7, 10, 8], priority: 55, allowOmitFifth: true },
+  // The altered dominant prints as `C7alt`, not as the spelled `C7(b9,#9,#5)`. `alt` is how the idiom
+  // names this sound: it says "every tension comes from the altered scale" in one token, whereas the
+  // spelled form implies a specific chosen subset and forces an arbitrary #5-vs-b13 choice for a tone
+  // that is both. It carries no `suffixAlteration` for the same reason - `alt` is the whole label, so
+  // there is nothing to fold into an extras group.
+  { id: '7alt', suffix: '7alt', fullName: 'altered dominant', intervals: [0, 4, 10, 1, 3, 8], priority: 56, degreeOverrides: { 3: 1, 8: 5 } },
   { id: '9sus4', suffix: '9sus4', fullName: 'dominant ninth suspended fourth', intervals: [0, 5, 7, 10, 2], priority: 54, allowOmitFifth: true },
-  { id: '7b5', suffix: '7b5', fullName: 'dominant flat fifth', intervals: [0, 4, 6, 10], priority: 49 },
-  { id: '7#5', suffix: '7#5', fullName: 'dominant sharp fifth', intervals: [0, 4, 8, 10], priority: 49 },
-  { id: 'maj7#5', suffix: 'maj7#5', fullName: 'major seventh sharp fifth', intervals: [0, 4, 8, 11], priority: 49 },
+  // [C E G A D] is a sixth-ninth chord in every fake book; with no template of its own it used to resolve
+  // to `D9sus4` on a foreign root. The `/` is part of the suffix, not a slash bass, so an inverted voicing
+  // legitimately reads `C6/9/G` - a form that does appear in print.
+  // Like `6`/`m6`, and for the same reason, these do NOT allow an omitted fifth: [0 2 4 9] is far too
+  // common a shape, and a fifth-less 6/9 swallowed dozens of better-named voicings whole. The priority is
+  // set just high enough to carry the complete five-note shape past its `9sus4`-on-another-root twin.
+  { id: '6/9', suffix: '6/9', fullName: 'major sixth added ninth', intervals: [0, 4, 7, 9, 2], priority: 55 },
+  // `m6/9` sits lower because it needs no such headroom: its rival is a `m7b5add11` a minor third below,
+  // which is already the weaker reading. Any higher and it starts winning that argument even when the
+  // sounding bass is the m7b5 root, turning `Cm7b5add11` into `D#m6/9/B#`.
+  { id: 'm6/9', suffix: 'm6/9', fullName: 'minor sixth added ninth', intervals: [0, 3, 7, 9, 2], priority: 37 },
+  { id: '7b5', suffix: '7b5', suffixAlteration: 'b5', fullName: 'dominant flat fifth', intervals: [0, 4, 6, 10], priority: 49 },
+  { id: '7#5', suffix: '7#5', suffixAlteration: '#5', fullName: 'dominant sharp fifth', intervals: [0, 4, 8, 10], priority: 49 },
+  { id: 'maj7#5', suffix: 'maj7#5', suffixAlteration: '#5', fullName: 'major seventh sharp fifth', intervals: [0, 4, 8, 11], priority: 49 },
   { id: 'mMaj7', suffix: 'mMaj7', fullName: 'minor-major seventh', intervals: [0, 3, 7, 11], priority: 48, allowOmitFifth: true },
   { id: 'maj7', suffix: 'maj7', fullName: 'major seventh', intervals: [0, 4, 7, 11], priority: 47, allowOmitFifth: true },
   { id: '7', suffix: '7', fullName: 'dominant seventh', intervals: [0, 4, 7, 10], priority: 47, allowOmitFifth: true },
@@ -347,10 +372,20 @@ function formatChordName(input: {
   style: ChordNameStyle;
   inversionMode: InversionMode;
 }): string {
-  const suffix = applyNameStyle(input.suffix, input.style);
-  const additions = formatAdditions(input.additions.map((addition) => applyNameStyle(addition, input.style)), suffix);
-  const omissions = input.omissions.length > 0 ? `(${input.omissions.join(',')})` : '';
-  const base = `${input.rootName}${suffix}${additions}${omissions}`;
+  const { suffix: rawSuffix, additions: rawAdditions } = regroupAlterations(
+    input.suffix,
+    input.template.suffixAlteration,
+    input.additions,
+  );
+  const suffix = applyNameStyle(rawSuffix, input.style);
+  const additions = formatAdditions(rawAdditions.map((addition) => applyNameStyle(addition, input.style)), suffix);
+  // An addition group and an omission group must never sit side by side ("Cadd9(6)(no5)"). When the
+  // additions already print parenthesised, the omissions join that same group; when a lone addition is
+  // glued to the suffix (`Fmaj7#11`), it stays glued and the omissions keep their own group.
+  const merged = additions.startsWith('(') && input.omissions.length > 0
+    ? `${additions.slice(0, -1)},${input.omissions.join(',')})`
+    : `${additions}${input.omissions.length > 0 ? `(${input.omissions.join(',')})` : ''}`;
+  const base = `${input.rootName}${suffix}${merged}`;
 
   if (input.inversionMode === 'root-only' || input.bass === input.root) {
     return base;
@@ -377,6 +412,56 @@ function formatChordName(input: {
   return `${base} ${ORDINALS[inversionIndex]}`;
 }
 
+/** Print order for alterations inside a parenthesised group: by tension degree (9, 11, 5, 13), and flat
+ * before natural before sharp within a degree. Charts read upward through the tensions - `C7(b9,#11)`,
+ * never the semitone-ascending `C7#11b9` the extras happened to be collected in. The altered fifth sits
+ * between the 11th and the 13th because it is a fifth, not a tension: `C7(#9,#5)`. */
+const ALTERATION_ORDER: Record<string, number> = {
+  addb3: 0,
+  add3: 1,
+  b9: 10,
+  add9: 11,
+  '#9': 12,
+  add11: 20,
+  '#11': 21,
+  b5: 30,
+  add5: 31,
+  '#5': 32,
+  b13: 40,
+  '6': 41,
+  add13: 42,
+  addb7: 50,
+  addmaj7: 51,
+};
+
+/**
+ * Fold a template's own alteration back in with the extra ones so they print as a single ordered group.
+ * Only done when there is something to merge with: a bare `C7#11` or `Cmaj7#5` keeps its familiar
+ * one-piece suffix. The template's `suffix` field is untouched, so the spelling rules that sniff it
+ * (`#9` -> D#, `#11` -> F#, `b13` -> Ab) still see the string they expect.
+ */
+function regroupAlterations(
+  suffix: string,
+  suffixAlteration: string | undefined,
+  additions: string[],
+): { suffix: string; additions: string[] } {
+  const sorted = [...additions].sort(alterationOrder);
+
+  if (suffixAlteration === undefined || additions.length === 0 || !suffix.endsWith(suffixAlteration)) {
+    return { suffix, additions: sorted };
+  }
+
+  return {
+    suffix: suffix.slice(0, suffix.length - suffixAlteration.length),
+    additions: [...additions, suffixAlteration].sort(alterationOrder),
+  };
+}
+
+function alterationOrder(a: string, b: string): number {
+  const rank = (label: string) => ALTERATION_ORDER[label] ?? 60;
+  return rank(a) - rank(b) || a.localeCompare(b);
+}
+
 /** Additions are parenthesised whenever bare concatenation would read as a different chord: `C` + `#9`
  * must never render as `C#9` (a chord on C sharp), and `Gadd11` + `6` must never render as `Gadd116`. */
 function formatAdditions(additions: string[], suffix: string): string {
@@ -386,6 +471,9 @@ function formatAdditions(additions: string[], suffix: string): string {
 
   const ambiguous = additions.length > 1
     || suffix === ''
+    // A compound suffix already ends in a degree number that the addition would run straight into:
+    // `C6/9` + `b9` must not render as the unreadable `C6/9b9`.
+    || suffix.includes('/')
     || additions.some((addition) => /^\d/.test(addition));
 
   return ambiguous ? `(${additions.join(',')})` : additions[0];
@@ -409,6 +497,11 @@ export function inversionOrdinalIndex(bassInterval: number, chordToneIntervals: 
 // Minor deliberately stays `m` rather than becoming the minus sign `−`. Charts using Δ often pair it
 // with `C−7`, but the minus is easy to misread as a hyphen or a flat at a glance, and `Cm7` is
 // unambiguous in every vocabulary. Change SYMBOL_REWRITES if you want the minus.
+//
+// `+` is deliberately triad-only: there is no `7 -> +7` rewrite, so an altered dominant reads `C7#5`
+// rather than `C+7`. `+` names the augmented TRIAD; on a seventh chord the raised fifth is an
+// alteration like any other and belongs in the alteration group, which is also what lets it sort with
+// its siblings in `C7(#9,#5)`. Only `aug` (the bare triad) becomes `+`.
 const SYMBOL_REWRITES: [RegExp, string][] = [
   [/m7b5/g, 'ø7'],
   [/dim7/g, '°7'],
@@ -542,6 +635,9 @@ function buildSpelling(
 }
 
 function degreeForInterval(interval: number, template: ChordTemplate): number {
+  const override = template.degreeOverrides?.[interval];
+  if (override !== undefined) return override;
+
   if (interval === 0) return 0;
   if (interval === 1 || interval === 2) return 1;
   if (interval === 3 && template.suffix.includes('#9')) return 1;

@@ -139,6 +139,27 @@ const TENSIONS: Case[] = [
   { notes: [60, 63, 66, 71], expected: 'CdimMaj7' },
 ];
 
+// Alterations print in ascending tension order (9 before 11 before 13, flat before sharp within a
+// degree) as ONE parenthesised group, regardless of whether an alteration came from the template's own
+// suffix or from an extra note. No fake book prints "C7#11b9".
+const ALTERATION_ORDER: Case[] = [
+  { notes: [60, 64, 67, 70, 73, 78], expected: 'C7(b9,#11)' },
+  { notes: [60, 64, 67, 70, 73, 80], expected: 'C7(b9,b13)' },
+  { notes: [60, 64, 67, 70, 73, 75], expected: 'C7(b9,#9)' },
+  { notes: [60, 64, 68, 70, 75], expected: 'C7(#9,#5)' },
+  { notes: [60, 64, 67, 70, 73, 78, 80], expected: 'C7(b9,#11,b13)' },
+];
+
+// Three sounds the idiom uses constantly that previously resolved to a different root entirely.
+const IDIOMATIC_SOUNDS: Case[] = [
+  { notes: [60, 64, 67, 69, 74], expected: 'C6/9' },
+  { notes: [55, 60, 64, 69, 74], expected: 'C6/9/G' },
+  { notes: [60, 64, 69, 74], expected: 'Cadd9(6,no5)' },
+  { notes: [60, 63, 67, 69, 74], expected: 'Cm6/9' },
+  { notes: [60, 65, 67, 70, 74, 81], expected: 'C13sus4' },
+  { notes: [60, 64, 70, 73, 75, 80], expected: 'C7alt' },
+];
+
 const GROUPS: [string, Case[]][] = [
   ['triads in root position and both inversions', TRIADS],
   ['seventh chords in all four inversions', SEVENTH_INVERSIONS],
@@ -147,6 +168,8 @@ const GROUPS: [string, Case[]][] = [
   ['bass-driven ambiguity resolution', AMBIGUOUS],
   ['two-note intervals', DYADS],
   ['altered and added tensions', TENSIONS],
+  ['alterations in ascending tension order', ALTERATION_ORDER],
+  ['idiomatic sixth-ninth, sus thirteenth and altered dominant', IDIOMATIC_SOUNDS],
 ];
 
 describe('chord recognition corpus', () => {
@@ -183,6 +206,30 @@ describe('chord spelling corpus', () => {
 
     expect(chord?.displayName).toBe('Cmaj7#9');
     expect(chord?.spelling[3]).toBe('D#');
+  });
+
+  it('still spells a dominant #11 as a raised fourth degree after the alteration regrouping', () => {
+    const chord = detectChord([60, 64, 66, 67, 70], 'maj', 'slash').primary;
+
+    expect(chord?.displayName).toBe('C7#11');
+    expect(chord?.spelling[6]).toBe('F#');
+  });
+
+  it('still spells a dominant #9 as a raised second degree after the alteration regrouping', () => {
+    const chord = detectChord([60, 63, 64, 67, 70], 'maj', 'slash').primary;
+
+    expect(chord?.displayName).toBe('C7#9');
+    expect(chord?.spelling[3]).toBe('D#');
+  });
+
+  it('spells an altered dominant with a raised ninth and a flat thirteenth, not a doubled E letter', () => {
+    const chord = detectChord([60, 64, 70, 73, 75, 80], 'maj', 'slash').primary;
+
+    expect(chord?.displayName).toBe('C7alt');
+    expect(chord?.spelling[1]).toBe('Db');
+    expect(chord?.spelling[3]).toBe('D#');
+    expect(chord?.spelling[4]).toBe('E');
+    expect(chord?.spelling[8]).toBe('Ab');
   });
 
   it('spells a rootless-fifth #11 voicing without inventing a Cb', () => {
@@ -223,6 +270,27 @@ describe('chord naming hygiene', () => {
 
     expect(chord?.displayName).toBe('C(#9)');
     expect(chord?.displayName).not.toBe('C#9');
+  });
+
+  it('never stacks two parenthesised groups side by side', () => {
+    // "Cadd9(6)(no5)" is nobody's notation: additions and omissions belong in one group.
+    for (let a = 1; a < 12; a += 1) {
+      for (let b = a + 1; b < 12; b += 1) {
+        for (let c = b + 1; c < 12; c += 1) {
+          for (let d = c + 1; d < 12; d += 1) {
+            for (const voicing of [[60, 60 + a, 60 + b, 60 + c], [60, 60 + a, 60 + b, 60 + c, 60 + d]]) {
+              const result = detectChord(voicing, 'maj', 'slash');
+              const names = [result.primary, ...result.alternatives]
+                .map((candidate) => candidate?.displayName ?? '');
+
+              for (const name of names) {
+                expect(name, `stacked groups in ${name}`).not.toMatch(/\)\(/);
+              }
+            }
+          }
+        }
+      }
+    }
   });
 
   it('never silently drops a sounding note from the chord name', () => {
