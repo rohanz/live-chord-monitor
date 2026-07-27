@@ -1,6 +1,8 @@
 import { Settings, X } from 'lucide-react';
 import type { ChordNameStyle, InversionMode } from '../music/chords';
 import { FLAT_KEYS, SHARP_KEYS, type SpellingKey } from '../music/notes';
+import { useDrawerDialog } from '../hooks/useDrawerDialog';
+import { LINGER_LABELS, LINGER_OPTIONS } from '../settings-options';
 
 type SettingsDrawerProps = {
   onClose: () => void;
@@ -37,8 +39,17 @@ export function SettingsDrawer({
   lingerMs,
   onLingerMsChange,
 }: SettingsDrawerProps) {
+  const { ref, onKeyDown } = useDrawerDialog<HTMLElement>(onClose);
+
   return (
-    <aside className="settings-drawer" aria-label="Settings panel">
+    <aside
+      className="settings-drawer"
+      role="dialog"
+      aria-label="Settings panel"
+      tabIndex={-1}
+      ref={ref}
+      onKeyDown={onKeyDown}
+    >
       <div className="settings-title">
         <Settings size={17} />
         <span>Settings</span>
@@ -111,11 +122,9 @@ export function SettingsDrawer({
       <label>
         Linger
         <select value={lingerMs} onChange={(event) => onLingerMsChange(Number(event.target.value))}>
-          <option value={0}>Off</option>
-          <option value={250}>0.25s</option>
-          <option value={500}>0.5s</option>
-          <option value={750}>0.75s</option>
-          <option value={1000}>1s</option>
+          {LINGER_OPTIONS.map((option) => (
+            <option key={option} value={option}>{LINGER_LABELS[option]}</option>
+          ))}
         </select>
       </label>
     </aside>

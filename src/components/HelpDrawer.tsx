@@ -1,12 +1,22 @@
 import { CircleHelp, X } from 'lucide-react';
+import { useDrawerDialog } from '../hooks/useDrawerDialog';
 
 type HelpDrawerProps = {
   onClose: () => void;
 };
 
 export function HelpDrawer({ onClose }: HelpDrawerProps) {
+  const { ref, onKeyDown } = useDrawerDialog<HTMLElement>(onClose);
+
   return (
-    <aside className="settings-drawer" aria-label="Help panel">
+    <aside
+      className="settings-drawer"
+      role="dialog"
+      aria-label="Help panel"
+      tabIndex={-1}
+      ref={ref}
+      onKeyDown={onKeyDown}
+    >
       <div className="settings-title">
         <CircleHelp size={17} />
         <span>Help</span>
