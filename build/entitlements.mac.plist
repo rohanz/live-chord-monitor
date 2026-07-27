@@ -7,7 +7,12 @@
   <true/>
   <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
   <true/>
-  <key>com.apple.security.cs.disable-library-validation</key>
-  <true/>
+  <!--
+    Deliberately NOT present: com.apple.security.cs.disable-library-validation.
+    It is only needed for unsigned native modules, and the asar ships no native code (the renderer
+    bundle is pure JS). Granting it would let an attacker inject an unsigned dylib into this signed,
+    hardened-runtime process.
+  -->
+
 </dict>
 </plist>

@@ -1,4 +1,7 @@
 {
+  // Solution-style root: `"files": []` means this config checks NOTHING on its own, so a bare
+  // `npx tsc --noEmit` here is vacuously green and proves nothing. Use `npm run typecheck`
+  // (`tsc -b --force`), which builds both referenced projects - that is what `npm run build` runs.
   "files": [],
   "references": [
     { "path": "./tsconfig.app.json" },
