@@ -10,7 +10,16 @@ import { clampMidiStart, keyPrefersFlats, midiNoteName, type SpellingKey } from 
 import { useComputerKeyboard } from './hooks/useComputerKeyboard';
 import { useMidiInputs } from './hooks/useMidiInputs';
 import { useDisplayNotes, FADE_OUT_MS } from './hooks/useDisplayNotes';
-import { usePersistentState } from './hooks/usePersistentState';
+import { isBoolean, numberInRange, oneOf, usePersistentState } from './hooks/usePersistentState';
+import { isTextEntryTarget } from './utils/textEditingTarget';
+import {
+  INVERSION_MODES,
+  LINGER_OPTIONS,
+  MAX_VOLUME,
+  MIN_VOLUME,
+  NAME_STYLES,
+  SPELLING_KEY_OPTIONS,
+} from './settings-options';
 
 const VISIBLE_SEMITONES = 36;
 const DEFAULT_START = 48;
@@ -18,33 +27,53 @@ const COMPUTER_KEY_BASE = 60;
 const MIN_KEYBOARD_BASE = 36;
 const MAX_KEYBOARD_BASE = 84;
 const DEFAULT_VOLUME = 0.72;
+const EMPTY_NOTES: number[] = [];
+
+// Validators are hoisted so each is a stable identity across renders.
+const isVolume = numberInRange(MIN_VOLUME, MAX_VOLUME);
+const isLingerMs = oneOf(LINGER_OPTIONS);
+const isNameStyle = oneOf(NAME_STYLES);
+const isInversionMode = oneOf(INVERSION_MODES);
+const isSpellingKey = oneOf(SPELLING_KEY_OPTIONS);
 
 type HeldSources = Record<number, string[]>;
+type OpenDrawer = 'help' | 'settings' | null;
 
 export function App() {
   const [heldSources, setHeldSources] = useState<HeldSources>({});
   const [rangeStart, setRangeStart] = useState(DEFAULT_START);
   const [computerKeyBase, setComputerKeyBase] = useState(COMPUTER_KEY_BASE);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
+  // One drawer at a time: Help and Settings occupy the exact same fixed slot, so two independent
+  // booleans let them stack invisibly on top of each other.
+  const [openDrawer, setOpenDrawer] = useState<OpenDrawer>(null);
 
-  // Persisted user settings so preferences survive app restarts.
-  const [volume, setVolume] = usePersistentState('lcm:volume', DEFAULT_VOLUME);
-  const [muted, setMuted] = usePersistentState('lcm:muted', false);
-  const [showPressedLabels, setShowPressedLabels] = usePersistentState('lcm:showPressedLabels', false);
-  const [notationEnabled, setNotationEnabled] = usePersistentState('lcm:notationEnabled', true);
-  const [nameStyle, setNameStyle] = usePersistentState<ChordNameStyle>('lcm:nameStyle', 'maj');
-  const [inversionMode, setInversionMode] = usePersistentState<InversionMode>('lcm:inversionMode', 'slash');
-  const [spellingKey, setSpellingKey] = usePersistentState<SpellingKey>('lcm:spellingKey', 'C');
-  const [lingerMs, setLingerMs] = usePersistentState('lcm:lingerMs', 500);
-  const [computerKeyboardNotes, setComputerKeyboardNotes] = usePersistentState('lcm:computerKeyboardNotes', true);
+  // Persisted user settings so preferences survive app restarts. Every key gets a validator:
+  // localStorage is user-writable, and an unvalidated value (e.g. `lcm:volume = 99`) would drive
+  // the audio gain or leave the UI showing something other than the real state.
+  const [volume, setVolume] = usePersistentState('lcm:volume', DEFAULT_VOLUME, isVolume);
+  const [muted, setMuted] = usePersistentState('lcm:muted', false, isBoolean);
+  const [showPressedLabels, setShowPressedLabels] = usePersistentState('lcm:showPressedLabels', false, isBoolean);
+  const [notationEnabled, setNotationEnabled] = usePersistentState('lcm:notationEnabled', true, isBoolean);
+  const [nameStyle, setNameStyle] = usePersistentState<ChordNameStyle>('lcm:nameStyle', 'maj', isNameStyle);
+  const [inversionMode, setInversionMode] = usePersistentState<InversionMode>('lcm:inversionMode', 'slash', isInversionMode);
+  const [spellingKey, setSpellingKey] = usePersistentState<SpellingKey>('lcm:spellingKey', 'C', isSpellingKey);
+  const [lingerMs, setLingerMs] = usePersistentState('lcm:lingerMs', 500, isLingerMs);
+  const [computerKeyboardNotes, setComputerKeyboardNotes] = usePersistentState('lcm:computerKeyboardNotes', true, isBoolean);
 
-  const activeNotes = useMemo(() => (
+  // Keyed on note CONTENT, not on `heldSources` identity: a refcount-only change
+  // (second source added/removed for an already-held note) must not hand VexFlow a
+  // new array and force a full staff teardown/rebuild.
+  const activeNotesKey = useMemo(() => (
     Object.entries(heldSources)
       .filter(([, sources]) => sources.length > 0)
       .map(([note]) => Number(note))
       .sort((a, b) => a - b)
+      .join(',')
   ), [heldSources]);
+
+  const activeNotes = useMemo(() => (
+    activeNotesKey === '' ? EMPTY_NOTES : activeNotesKey.split(',').map(Number)
+  ), [activeNotesKey]);
 
   const activeNoteSet = useMemo(() => new Set(activeNotes), [activeNotes]);
   const preferFlats = keyPrefersFlats(spellingKey);
@@ -65,7 +94,8 @@ export function App() {
       nextSources.delete(source);
 
       if (nextSources.size === 0) {
-        const { [note]: _removed, ...rest } = current;
+        const rest = { ...current };
+        delete rest[note];
         return rest;
       }
 
@@ -79,19 +109,19 @@ export function App() {
     setComputerKeyBase(Math.min(MAX_KEYBOARD_BASE, Math.max(MIN_KEYBOARD_BASE, clampedStart + 12)));
   }, []);
 
+  // `computerKeyBase` is read from state (not mutated inside the updater) so the
+  // dependent `setRangeStart` stays a plain side effect rather than a hidden one.
   const shiftComputerOctave = useCallback((direction: -1 | 1) => {
-    setComputerKeyBase((current) => {
-      const next = Math.min(MAX_KEYBOARD_BASE, Math.max(MIN_KEYBOARD_BASE, current + direction * 12));
-      setRangeStart(clampMidiStart(next - 12, VISIBLE_SEMITONES));
-      return next;
-    });
-  }, []);
+    const next = Math.min(MAX_KEYBOARD_BASE, Math.max(MIN_KEYBOARD_BASE, computerKeyBase + direction * 12));
+    setComputerKeyBase(next);
+    setRangeStart(clampMidiStart(next - 12, VISIBLE_SEMITONES));
+  }, [computerKeyBase]);
 
   useEffect(() => {
     function handleGlobalShortcut(event: KeyboardEvent) {
-      const target = event.target as HTMLElement | null;
-
-      if (isTextEditingTarget(target) || event.metaKey || event.ctrlKey || event.altKey || event.repeat) {
+      // Z/X are range controls, deliberately available even while a settings
+      // control has focus; only literal text entry swallows them.
+      if (isTextEntryTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey || event.repeat) {
         return;
       }
 
@@ -153,11 +183,21 @@ export function App() {
           </div>
 
           <div className="panel-buttons">
-            <button className="settings-button" type="button" onClick={() => setHelpOpen(true)}>
+            <button
+              className="settings-button"
+              type="button"
+              aria-expanded={openDrawer === 'help'}
+              onClick={() => setOpenDrawer('help')}
+            >
               <CircleHelp size={18} />
               <span>Help</span>
             </button>
-            <button className="settings-button" type="button" onClick={() => setSettingsOpen(true)}>
+            <button
+              className="settings-button"
+              type="button"
+              aria-expanded={openDrawer === 'settings'}
+              onClick={() => setOpenDrawer('settings')}
+            >
               <SlidersHorizontal size={18} />
               <span>Settings</span>
             </button>
@@ -170,6 +210,7 @@ export function App() {
           className={`chord-readout ${fading ? 'is-fading' : ''}`}
           style={{ '--fade-duration': `${FADE_OUT_MS}ms` } as React.CSSProperties}
           aria-live="polite"
+          aria-atomic="true"
         >
           <h1>{chord.primary?.displayName ?? ''}</h1>
           <div className="alternatives">
@@ -226,11 +267,11 @@ export function App() {
         </div>
       </section>
 
-      {helpOpen ? <HelpDrawer onClose={() => setHelpOpen(false)} /> : null}
+      {openDrawer === 'help' ? <HelpDrawer onClose={() => setOpenDrawer(null)} /> : null}
 
-      {settingsOpen ? (
+      {openDrawer === 'settings' ? (
         <SettingsDrawer
-          onClose={() => setSettingsOpen(false)}
+          onClose={() => setOpenDrawer(null)}
           nameStyle={nameStyle}
           onNameStyleChange={setNameStyle}
           inversionMode={inversionMode}
@@ -262,15 +303,3 @@ function formatMidiStatus(status: string, deviceCount: number): string {
   return 'MIDI error';
 }
 
-function isTextEditingTarget(target: HTMLElement | null): boolean {
-  if (!target || !(target instanceof HTMLElement)) {
-    return false;
-  }
-
-  if (target.closest('textarea, select, [contenteditable="true"]')) {
-    return true;
-  }
-
-  const input = target.closest('input') as HTMLInputElement | null;
-  return Boolean(input && !['range', 'checkbox', 'radio', 'button'].includes(input.type));
-}

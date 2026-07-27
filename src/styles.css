@@ -170,14 +170,17 @@ h1 {
   height: 100%;
 }
 
-.notation-surface svg .vf-stavenote,
-.notation-surface svg .vf-modifiers {
+/* Only `.vf-stavenote` is needed, and it is the only VexFlow class worth targeting here. VexFlow 5
+   emits no `.vf-modifiers` or `.vf-accidental` class: accidentals are bare SMuFL <text> glyphs nested
+   inside the `.vf-notehead` group, which is itself inside `.vf-stavenote`. The classes VexFlow 5
+   actually renders in this app are vf-stave, vf-stavebarline, vf-clef, vf-stavenote, vf-notehead.
+   Do not re-add a `.vf-modifiers` rule; it matches nothing. */
+.notation-surface svg .vf-stavenote {
   opacity: 1;
   transition: opacity 100ms ease-out;
 }
 
-.notation-surface.is-fading svg .vf-stavenote,
-.notation-surface.is-fading svg .vf-modifiers {
+.notation-surface.is-fading svg .vf-stavenote {
   opacity: 0;
 }
 

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, session } from 'electron';
+import { app, BrowserWindow, protocol, session, shell } from 'electron';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
 const rendererDist = path.join(__dirname, '../dist');
 const APP_ORIGIN = 'app://bundle';
+const DEV_ORIGIN = 'http://localhost:5173';
 
 // Web MIDI ships in Chromium by default; this switch is belt-and-suspenders and needs no
 // experimental web-platform features.
@@ -77,6 +78,29 @@ function registerAppProtocol() {
   });
 }
 
+/** The only origin the renderer is ever allowed to sit on: app://bundle in prod, Vite in dev. */
+function isAllowedOrigin(url: string): boolean {
+  try {
+    const { origin } = new URL(url);
+    return origin === APP_ORIGIN || (isDev && origin === DEV_ORIGIN);
+  } catch {
+    return false;
+  }
+}
+
+/** Hand http(s) links to the user's browser; drop anything else (file:, javascript:, custom schemes). */
+async function openExternally(url: string) {
+  try {
+    const { protocol } = new URL(url);
+
+    if (protocol === 'https:' || protocol === 'http:') {
+      await shell.openExternal(url);
+    }
+  } catch {
+    // Not a parseable URL - ignore.
+  }
+}
+
 function createMainWindow() {
   const win = new BrowserWindow({
     width: 1180,
@@ -103,8 +127,23 @@ function createMainWindow() {
   });
   session.defaultSession.setPermissionCheckHandler((_webContents, permission) => isMidiPermission(permission));
 
+  // Navigation guards. The CSP does not restrict navigation, and an unhandled `window.open` would
+  // spawn a child window with webPreferences we did not choose. Refuse both: this app has exactly
+  // one origin and never opens child windows.
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    void openExternally(url);
+    return { action: 'deny' };
+  });
+
+  win.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedOrigin(url)) {
+      event.preventDefault();
+      void openExternally(url);
+    }
+  });
+
   if (isDev) {
-    win.loadURL('http://localhost:5173');
+    win.loadURL(DEV_ORIGIN);
     win.webContents.openDevTools({ mode: 'detach' });
     return;
   }

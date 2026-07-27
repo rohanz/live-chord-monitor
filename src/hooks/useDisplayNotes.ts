@@ -24,6 +24,12 @@ export function useDisplayNotes(activeNotes: number[], lingerMs: number): Displa
   const [displayNotes, setDisplayNotes] = useState<number[]>([]);
   const [fading, setFading] = useState(false);
   const displayNotesRef = useRef<number[]>([]);
+  /**
+   * True while `displayNotes` still reflects notes that are actually held. Once everything is
+   * released the display keeps showing the chord (linger/fade), but it is no longer "live" - and a
+   * press arriving then is a brand new chord, never a release-only reduction of the stale one.
+   */
+  const displayIsLiveRef = useRef(false);
 
   useEffect(() => {
     displayNotesRef.current = displayNotes;
@@ -34,17 +40,24 @@ export function useDisplayNotes(activeNotes: number[], lingerMs: number): Displa
       setFading(false);
 
       const currentDisplayNotes = displayNotesRef.current;
-      const isReleaseOnlyChange = activeNotes.length < currentDisplayNotes.length
+      const isReleaseOnlyChange = displayIsLiveRef.current
+        && activeNotes.length < currentDisplayNotes.length
         && activeNotes.every((note) => currentDisplayNotes.includes(note));
 
       if (!isReleaseOnlyChange) {
+        displayIsLiveRef.current = true;
         setDisplayNotes(activeNotes);
         return;
       }
 
-      const settleTimeout = window.setTimeout(() => setDisplayNotes(activeNotes), RELEASE_SETTLE_MS);
+      const settleTimeout = window.setTimeout(() => {
+        displayIsLiveRef.current = true;
+        setDisplayNotes(activeNotes);
+      }, RELEASE_SETTLE_MS);
       return () => window.clearTimeout(settleTimeout);
     }
+
+    displayIsLiveRef.current = false;
 
     if (displayNotesRef.current.length === 0) {
       setFading(false);
