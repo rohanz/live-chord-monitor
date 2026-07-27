@@ -109,6 +109,10 @@ function createMainWindow() {
     minHeight: 680,
     title: 'Live Chord Monitor',
     backgroundColor: '#f7f4ee',
+    // Do not show an empty frame while the renderer is still booting. Without this the window is
+    // mapped as soon as it is constructed - roughly 230ms before the first paint - so the app looks
+    // open and ready while it is still incapable of registering a note.
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
@@ -140,6 +144,12 @@ function createMainWindow() {
       event.preventDefault();
       void openExternally(url);
     }
+  });
+
+  // Registered before the dev early-return: the window is created with `show: false`, so this is
+  // the only thing that ever makes it visible, in BOTH dev and packaged builds.
+  win.once('ready-to-show', () => {
+    win.show();
   });
 
   if (isDev) {
