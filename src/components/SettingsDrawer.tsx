@@ -61,9 +61,9 @@ export function SettingsDrawer({
       <label>
         Chord style
         <select value={nameStyle} onChange={(event) => onNameStyleChange(event.target.value as ChordNameStyle)}>
-          <option value="maj">Cmaj7</option>
-          <option value="capitalM">CM7</option>
-          <option value="delta">CΔ7</option>
+          <option value="maj">Text — Cmaj7, Cdim7, Cm7b5</option>
+          <option value="capitalM">Short — CM7, Cdim7, Cm7b5</option>
+          <option value="delta">Symbols — CΔ7, C°7, Cø7</option>
         </select>
       </label>
 

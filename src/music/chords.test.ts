@@ -84,3 +84,42 @@ describe('detectChord', () => {
     expect(names).not.toContain('Cadd13');
   });
 });
+
+describe('chord name styles', () => {
+  const name = (notes: number[], style: 'maj' | 'capitalM' | 'delta') =>
+    detectChord(notes, style, 'root-only', false).primary?.displayName;
+
+  const DIM = [60, 63, 66];
+  const DIM7 = [60, 63, 66, 69];
+  const HALF_DIM = [60, 63, 66, 70];
+  const AUG = [60, 64, 68];
+  const DIM_MAJ7 = [60, 63, 66, 71];
+  const MAJ7 = [60, 64, 67, 71];
+
+  it('uses jazz lead-sheet symbols in the symbol style', () => {
+    expect(name(DIM, 'delta')).toBe('C°');
+    expect(name(DIM7, 'delta')).toBe('C°7');
+    expect(name(HALF_DIM, 'delta')).toBe('Cø7');
+    expect(name(AUG, 'delta')).toBe('C+');
+    expect(name(MAJ7, 'delta')).toBe('CΔ7');
+  });
+
+  it('does not mix a symbol and a spelled-out quality in one name', () => {
+    // "CdimΔ7" is incoherent: pick one vocabulary and stay in it.
+    expect(name(DIM_MAJ7, 'delta')).toBe('C°Δ7');
+  });
+
+  it('keeps the text styles spelled out, including the diminished family', () => {
+    for (const style of ['maj', 'capitalM'] as const) {
+      expect(name(DIM, style)).toBe('Cdim');
+      expect(name(DIM7, style)).toBe('Cdim7');
+      expect(name(HALF_DIM, style)).toBe('Cm7b5');
+      expect(name(AUG, style)).toBe('Caug');
+    }
+
+    expect(name(MAJ7, 'maj')).toBe('Cmaj7');
+    expect(name(MAJ7, 'capitalM')).toBe('CM7');
+    expect(name(DIM_MAJ7, 'maj')).toBe('CdimMaj7');
+    expect(name(DIM_MAJ7, 'capitalM')).toBe('CdimM7');
+  });
+});

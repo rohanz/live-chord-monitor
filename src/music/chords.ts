@@ -401,13 +401,35 @@ export function inversionOrdinalIndex(bassInterval: number, chordToneIntervals: 
   return position === -1 ? null : position + 1;
 }
 
+// Ordered rewrites for the jazz lead-sheet symbol style. Order is load-bearing: `m7b5` must be
+// consumed before anything else can chew on its `m`/`b5`, and `dim7` before the bare `dim` (so
+// `dim7` does not become `°7` via two passes, and `dimMaj7` still reaches `°Δ7`).
+//
+// A half-diminished seventh is the slashed circle rather than `m7b5`, and the `7` is written: `Cø7`.
+// Minor deliberately stays `m` rather than becoming the minus sign `−`. Charts using Δ often pair it
+// with `C−7`, but the minus is easy to misread as a hyphen or a flat at a glance, and `Cm7` is
+// unambiguous in every vocabulary. Change SYMBOL_REWRITES if you want the minus.
+const SYMBOL_REWRITES: [RegExp, string][] = [
+  [/m7b5/g, 'ø7'],
+  [/dim7/g, '°7'],
+  [/dim/g, '°'],
+  [/aug/g, '+'],
+  [/maj/gi, 'Δ'],
+];
+
+/**
+ * Render a suffix in the user's chosen vocabulary. The two text styles differ only in how a major
+ * seventh is spelled; the symbol style is a whole vocabulary, so it must rewrite the diminished,
+ * half-diminished and augmented qualities too. Leaving those spelled out produced names that mixed
+ * both vocabularies at once, e.g. "CdimΔ7".
+ */
 function applyNameStyle(suffix: string, style: ChordNameStyle): string {
   if (style === 'capitalM') {
     return suffix.replaceAll('maj', 'M').replaceAll('Maj', 'M');
   }
 
   if (style === 'delta') {
-    return suffix.replaceAll('maj', 'Δ').replaceAll('Maj', 'Δ');
+    return SYMBOL_REWRITES.reduce((text, [pattern, symbol]) => text.replace(pattern, symbol), suffix);
   }
 
   return suffix;
