@@ -1,6 +1,6 @@
 {
   "name": "live-chord-monitor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A macOS Electron app for live MIDI and computer-keyboard chord monitoring.",
   "author": "Rohan",
   "private": true,
