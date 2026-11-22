@@ -398,10 +398,9 @@ function formatChordName(input: {
   const bassInterval = normalizedInterval(input.bass - input.root);
   // Only stacked-third chord tones (3rd, 5th, 7th) bear an inversion ordinal. A 9th/11th/13th in the
   // bass is a tension, not an inversion, so it stays slash-notated instead of inventing a high ordinal.
-  const chordToneOrder = input.intervals.filter(
-    (interval) => interval !== 0 && isStackedThirdDegree(interval, input.template),
-  );
-  const inversionIndex = inversionOrdinalIndex(bassInterval, chordToneOrder);
+  const inversionIndex = input.intervals.includes(bassInterval)
+    ? inversionOrdinalIndex(degreeForInterval(bassInterval, input.template))
+    : null;
 
   // A bass that is not actually a chord tone (e.g. an added-tension note in the bass) has no
   // meaningful inversion ordinal, so fall back to slash notation instead of mislabeling it.
@@ -479,14 +478,9 @@ function formatAdditions(additions: string[], suffix: string): string {
   return ambiguous ? `(${additions.join(',')})` : additions[0];
 }
 
-function isStackedThirdDegree(interval: number, template: ChordTemplate): boolean {
-  const degree = degreeForInterval(interval, template);
-  return degree === 2 || degree === 4 || degree === 6;
-}
-
-export function inversionOrdinalIndex(bassInterval: number, chordToneIntervals: number[]): number | null {
-  const position = chordToneIntervals.findIndex((interval) => interval === bassInterval);
-  return position === -1 ? null : position + 1;
+/** Zero-based written degree: third -> first, fifth -> second, seventh -> third. */
+export function inversionOrdinalIndex(bassDegree: number): number | null {
+  return bassDegree === 2 || bassDegree === 4 || bassDegree === 6 ? bassDegree / 2 : null;
 }
 
 // Ordered rewrites for the jazz lead-sheet symbol style. Order is load-bearing: `m7b5` must be

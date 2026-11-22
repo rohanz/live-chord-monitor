@@ -2,6 +2,12 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { PianoKeyboard, RangeOverview } from './PianoKeyboard';
 
+function pointerEvent(type: string, pointerId = 1) {
+  const event = new Event(type, { bubbles: true });
+  Object.defineProperty(event, 'pointerId', { value: pointerId });
+  return event;
+}
+
 describe('PianoKeyboard', () => {
   it('renders the selected visible range and lights active white and black keys with the same active class', () => {
     const { container } = render(
@@ -45,11 +51,11 @@ describe('PianoKeyboard', () => {
 
     firstWhiteKey.setPointerCapture = vi.fn();
     firstWhiteKey.releasePointerCapture = vi.fn();
-    firstWhiteKey.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }));
-    firstWhiteKey.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+    firstWhiteKey.dispatchEvent(pointerEvent('pointerdown'));
+    firstWhiteKey.dispatchEvent(pointerEvent('pointerup'));
 
-    expect(onPointerNoteOn).toHaveBeenCalledWith(60);
-    expect(onPointerNoteOff).toHaveBeenCalledWith(60);
+    expect(onPointerNoteOn).toHaveBeenCalledWith(60, expect.anything());
+    expect(onPointerNoteOff).toHaveBeenCalledWith(60, expect.anything());
   });
 
   it('allows pointer interaction on black keys above the white-key row', () => {
@@ -70,11 +76,11 @@ describe('PianoKeyboard', () => {
 
     firstBlackKey.setPointerCapture = vi.fn();
     firstBlackKey.releasePointerCapture = vi.fn();
-    firstBlackKey.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1 }));
-    firstBlackKey.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 1 }));
+    firstBlackKey.dispatchEvent(pointerEvent('pointerdown'));
+    firstBlackKey.dispatchEvent(pointerEvent('pointerup'));
 
-    expect(onPointerNoteOn).toHaveBeenCalledWith(61);
-    expect(onPointerNoteOff).toHaveBeenCalledWith(61);
+    expect(onPointerNoteOn).toHaveBeenCalledWith(61, expect.anything());
+    expect(onPointerNoteOff).toHaveBeenCalledWith(61, expect.anything());
   });
 
   it('releases a pointer-held note when the visible range scrolls the key out of view', () => {
@@ -92,7 +98,7 @@ describe('PianoKeyboard', () => {
     const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;
     firstWhiteKey.setPointerCapture = vi.fn();
     firstWhiteKey.releasePointerCapture = vi.fn();
-    fireEvent.pointerDown(firstWhiteKey, { pointerId: 1 });
+    fireEvent(firstWhiteKey, pointerEvent('pointerdown'));
     expect(onPointerNoteOff).not.toHaveBeenCalled();
 
     rerender(
@@ -106,7 +112,7 @@ describe('PianoKeyboard', () => {
       />,
     );
 
-    expect(onPointerNoteOff).toHaveBeenCalledWith(60);
+    expect(onPointerNoteOff).toHaveBeenCalledWith(60, expect.anything());
   });
 
   it('releases a pointer-held note from a window pointerup that never reaches the key', () => {
@@ -124,10 +130,10 @@ describe('PianoKeyboard', () => {
     const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;
     firstWhiteKey.setPointerCapture = vi.fn();
     firstWhiteKey.releasePointerCapture = vi.fn();
-    fireEvent.pointerDown(firstWhiteKey, { pointerId: 1 });
+    fireEvent(firstWhiteKey, pointerEvent('pointerdown'));
 
-    fireEvent.pointerUp(window, { pointerId: 1 });
-    expect(onPointerNoteOff).toHaveBeenCalledWith(60);
+    fireEvent(window, pointerEvent('pointerup'));
+    expect(onPointerNoteOff).toHaveBeenCalledWith(60, expect.anything());
     expect(onPointerNoteOff).toHaveBeenCalledTimes(1);
   });
 
@@ -146,8 +152,8 @@ describe('PianoKeyboard', () => {
     const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;
     firstWhiteKey.setPointerCapture = vi.fn();
     firstWhiteKey.releasePointerCapture = vi.fn();
-    fireEvent.pointerDown(firstWhiteKey, { pointerId: 1 });
-    fireEvent.pointerUp(firstWhiteKey, { pointerId: 1 });
+    fireEvent(firstWhiteKey, pointerEvent('pointerdown'));
+    fireEvent(firstWhiteKey, pointerEvent('pointerup'));
 
     expect(onPointerNoteOff).toHaveBeenCalledTimes(1);
   });
@@ -167,10 +173,10 @@ describe('PianoKeyboard', () => {
     const firstWhiteKey = container.querySelector('.white-key') as HTMLElement;
     firstWhiteKey.setPointerCapture = vi.fn();
     firstWhiteKey.releasePointerCapture = vi.fn();
-    fireEvent.pointerDown(firstWhiteKey, { pointerId: 1 });
+    fireEvent(firstWhiteKey, pointerEvent('pointerdown'));
 
     unmount();
-    expect(onPointerNoteOff).toHaveBeenCalledWith(60);
+    expect(onPointerNoteOff).toHaveBeenCalledWith(60, expect.anything());
   });
 });
 

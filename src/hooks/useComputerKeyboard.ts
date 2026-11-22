@@ -28,14 +28,27 @@ export function useComputerKeyboard(
     if (!enabled) {
       // Notes are already released, but keep tracking physical key state so
       // re-enabling never resurrects a key the user has since let go of.
-      const forget = (event: KeyboardEvent) => pressedKeys.delete(event.code);
+      const forget = (event: KeyboardEvent) => {
+        if (event.metaKey || event.key === 'Meta' || event.code.startsWith('Meta')) pressedKeys.clear();
+        else pressedKeys.delete(event.code);
+      };
+      const forgetMeta = (event: KeyboardEvent) => {
+        if (event.metaKey || event.key === 'Meta' || event.code.startsWith('Meta')) pressedKeys.clear();
+      };
+      const forgetHidden = () => {
+        if (document.visibilityState === 'hidden') pressedKeys.clear();
+      };
       const forgetAll = () => pressedKeys.clear();
 
       window.addEventListener('keyup', forget);
+      window.addEventListener('keydown', forgetMeta);
+      document.addEventListener('visibilitychange', forgetHidden);
       window.addEventListener('blur', forgetAll);
 
       return () => {
         window.removeEventListener('keyup', forget);
+        window.removeEventListener('keydown', forgetMeta);
+        document.removeEventListener('visibilitychange', forgetHidden);
         window.removeEventListener('blur', forgetAll);
       };
     }
@@ -45,6 +58,7 @@ export function useComputerKeyboard(
     }
 
     function handleKeyDown(event: KeyboardEvent) {
+      if (event.metaKey || event.key === 'Meta' || event.code.startsWith('Meta')) releaseAll();
       if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) {
         return;
       }
@@ -67,6 +81,7 @@ export function useComputerKeyboard(
     }
 
     function handleKeyUp(event: KeyboardEvent) {
+      if (event.key === 'Meta' || event.code.startsWith('Meta')) releaseAll();
       const offset = COMPUTER_KEY_OFFSETS[event.code];
 
       if (offset === undefined || !pressedKeys.has(event.code)) {

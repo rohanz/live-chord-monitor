@@ -1,4 +1,4 @@
-import { Settings, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { ChordNameStyle, InversionMode } from '../music/chords';
 import { FLAT_KEYS, SHARP_KEYS, type SpellingKey } from '../music/notes';
 import { toAccidentalGlyphs } from '../utils/accidentals';
@@ -21,6 +21,8 @@ type SettingsDrawerProps = {
   onComputerKeyboardNotesChange: (value: boolean) => void;
   lingerMs: number;
   onLingerMsChange: (value: number) => void;
+  midiDevices: Array<{ id: string; name: string; enabled: boolean }>;
+  onMidiDeviceEnabledChange: (id: string, enabled: boolean) => void;
 };
 
 export function SettingsDrawer({
@@ -39,6 +41,8 @@ export function SettingsDrawer({
   onComputerKeyboardNotesChange,
   lingerMs,
   onLingerMsChange,
+  midiDevices,
+  onMidiDeviceEnabledChange,
 }: SettingsDrawerProps) {
   const { ref, onKeyDown } = useDrawerDialog<HTMLElement>(onClose);
 
@@ -52,7 +56,6 @@ export function SettingsDrawer({
       onKeyDown={onKeyDown}
     >
       <div className="settings-title">
-        <Settings size={17} />
         <span>Settings</span>
         <button className="drawer-close" type="button" onClick={onClose} aria-label="Close settings">
           <X size={17} />
@@ -119,6 +122,22 @@ export function SettingsDrawer({
         />
         Computer keyboard notes
       </label>
+
+      {midiDevices.length > 0 ? (
+        <fieldset className="midi-device-list">
+          <legend>MIDI inputs</legend>
+          {midiDevices.map((device) => (
+            <label key={device.id} className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={device.enabled}
+                onChange={(event) => onMidiDeviceEnabledChange(device.id, event.target.checked)}
+              />
+              {device.name}{midiDevices.filter((input) => input.name === device.name).length > 1 ? ` (${device.id})` : ''}
+            </label>
+          ))}
+        </fieldset>
+      ) : null}
 
       <label>
         Linger

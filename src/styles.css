@@ -1,12 +1,68 @@
+/* House style: the "classic" (Swiss) theme of rohanjk.xyz.
+   Paper and ink, one periwinkle accent used only for meaning (held keys, active controls, links),
+   shared-edge cells divided by hairlines, tracked-caps labels top-left, no radius anywhere.
+   General Sans for UI, Chillax for display. Fonts are bundled (CSP is font-src 'self'; the app
+   must work offline), so `block` is safe: they are local and load in a frame or two. */
+
+@font-face {
+  font-family: 'General Sans';
+  src: url('./assets/fonts/GeneralSans-Variable.woff2') format('woff2');
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Chillax';
+  src: url('./assets/fonts/Chillax-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: 'Chillax';
+  src: url('./assets/fonts/Chillax-Semibold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: block;
+}
+
 :root {
-  color: #202020;
-  background: #f4f2ed;
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  --paper: #f7f5f0;
+  --paper-2: #efece5;
+  --key-white: #fbfaf7;
+  --ink: #141414;
+  --muted: #6b6b66;
+  --hair: #d6d3cc;
+  --hair-strong: #bdb9b0;
+  --accent: #5f66c2;
+  --accent-wash: rgba(95, 102, 194, 0.12);
+  --good: #2f4a3a;
+  --warn: #9b503d;
+
+  --font-ui: 'General Sans', system-ui, -apple-system, sans-serif;
+  --font-display: 'Chillax', var(--font-ui);
+  --track-caps: 0.08em;
+  --ease-house: cubic-bezier(.2, .7, .2, 1);
+  --dur-fade: 250ms;
+
+  --nav-h: 3.5rem;
+  --rail-w: clamp(11rem, 16vw, 15rem);
+  --gutter: clamp(1rem, 2.2vw, 2rem);
+  --rail-pad: clamp(0.85rem, 1.6vw, 1.5rem);
+  --drawer-w: 22rem;
+
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--font-ui);
+  font-weight: 450;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  /* Fluid root: ~16px in a laptop window, larger in full screen on a big display, so the whole
+     instrument scales together. Everything below is rem/vh. */
+  font-size: clamp(15px, 11px + 0.4vw, 21px);
 }
 
 * {
@@ -18,104 +74,425 @@ body {
   min-width: 0;
   min-height: 620px;
   overflow: hidden;
-  background: #f4f2ed;
+  background: var(--paper);
 }
 
 button,
 input,
 select {
   font: inherit;
+  color: inherit;
 }
 
 button {
   cursor: pointer;
 }
 
+:where(a, button, input, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---------- shell ---------- */
+
 .app-shell {
   position: relative;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) minmax(128px, 28vh);
-  gap: clamp(10px, 1.8vh, 20px);
+  grid-template-rows: var(--nav-h) minmax(0, 1fr) minmax(8.5rem, 30vh);
   height: 100vh;
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
-  padding: clamp(12px, 2.4vh, 22px) clamp(16px, 2.6vw, 30px) clamp(12px, 2.6vh, 26px);
 }
 
-.app-chrome {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  min-width: 0;
-}
-
-.header-left {
-  display: grid;
-  gap: 16px;
-  min-width: 0;
-}
-
-.app-title {
-  color: #5f5b53;
-  font-size: 0.84rem;
-  font-weight: 750;
-  letter-spacing: 0;
+.cell-label {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 550;
+  letter-spacing: var(--track-caps);
   text-transform: uppercase;
+  line-height: 1;
+  user-select: none;
+}
+
+/* ---------- top bar ---------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  min-width: 0;
+  padding: 0 var(--gutter);
+  border-bottom: 1px solid var(--hair);
+  background: var(--paper);
+  /* The whole bar drags the window (macOS hidden-inset title bar); controls opt back out. */
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.topbar button,
+.topbar input {
+  -webkit-app-region: no-drag;
+}
+
+/* Room for the traffic lights. Full screen hides them, so the padding goes too. */
+.app-shell.is-mac-window:not(.is-full-screen) .topbar {
+  padding-left: 6.25rem;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.2rem;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
 
 .status-cluster {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .status-pill {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 32px;
-  padding: 6px 10px;
-  border: 1px solid #d1ccc3;
-  border-radius: 999px;
-  background: #fbfaf6;
-  color: #46433e;
-  font-size: 0.82rem;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 550;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
-.status-ready {
-  border-color: #7cb7a6;
-  color: #22584d;
+.status-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  background: var(--hair-strong);
 }
 
+.status-ready .status-dot { background: var(--good); }
+.status-ready { color: var(--ink); }
+.status-denied .status-dot,
+.status-error .status-dot,
+.status-unsupported .status-dot { background: var(--warn); }
 .status-denied,
 .status-error,
-.status-unsupported {
-  border-color: #cc9171;
-  color: #7a3e24;
+.status-unsupported { color: var(--warn); }
+
+.control-strip {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1.25rem;
+  min-width: 0;
 }
 
-.readout-area {
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.panel-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* Text controls: tracked caps with the site's underline that draws in from the left. */
+.mute-button,
+.settings-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.25rem;
+  padding: 0 0.6rem;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 550;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+
+.mute-button {
+  min-width: 5.6rem;
+  justify-content: flex-start;
+}
+
+.mute-button span,
+.settings-button span {
+  position: relative;
+}
+
+.mute-button span::after,
+.settings-button span::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform .35s var(--ease-house);
+}
+
+.settings-button[aria-expanded='true'] {
+  color: var(--accent);
+}
+
+.settings-button[aria-expanded='true'] span::after,
+.mute-button:focus-visible span::after,
+.settings-button:focus-visible span::after {
+  transform: scaleX(1);
+}
+
+@media (hover: hover) {
+  .mute-button:hover span::after,
+  .settings-button:hover span::after {
+    transform: scaleX(1);
+  }
+}
+
+.mute-button.is-muted {
+  color: var(--muted);
+}
+
+/* Volume: a hairline track that fills with the accent, square ink thumb. */
+.volume-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: clamp(5.5rem, 11vw, 9rem);
+  height: 1.5rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.volume-slider::-webkit-slider-runnable-track {
+  height: 2px;
+  background: linear-gradient(to right, var(--accent) 0 var(--fill, 72%), var(--hair) var(--fill, 72%) 100%);
+}
+
+.volume-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: calc(-0.35rem + 1px);
+  border: 0;
+  background: var(--ink);
+}
+
+.mute-button.is-muted + .volume-slider::-webkit-slider-runnable-track {
+  background: var(--hair);
+}
+
+.mute-button.is-muted + .volume-slider::-webkit-slider-thumb {
+  background: var(--muted);
+}
+
+.icon-button,
+.drawer-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid var(--hair);
+  background: transparent;
+  color: var(--ink);
+  transition: background var(--dur-fade) ease, color var(--dur-fade) ease, border-color var(--dur-fade) ease;
+}
+
+@media (hover: hover) {
+  .icon-button:hover,
+  .drawer-close:hover {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+  }
+}
+
+.icon-button:active,
+.drawer-close:active {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.fullscreen-button {
+  margin-left: 0.5rem;
+}
+
+.fullscreen-button[aria-pressed='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The pressed rule above has the same specificity as the generic hover and comes later, so restate the
+   hover/active fill for the pressed state: accent fill, paper icon. */
+@media (hover: hover) {
+  .fullscreen-button[aria-pressed='true']:hover {
+    background: var(--accent);
+    color: var(--paper);
+  }
+}
+
+.fullscreen-button[aria-pressed='true']:active {
+  background: var(--accent);
+  color: var(--paper);
+}
+
+/* ---------- stage: rail + field ---------- */
+
+.stage {
   display: grid;
-  grid-template-rows: minmax(80px, 0.34fr) minmax(150px, 0.66fr);
-  align-content: center;
-  justify-items: center;
-  gap: clamp(6px, 1.2vh, 14px);
+  grid-template-columns: var(--rail-w) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  border-right: 1px solid var(--hair);
+  background: var(--paper-2);
+}
+
+.rail-cell {
+  display: grid;
+  gap: 0.6rem;
+  padding: 1rem var(--rail-pad) 1.1rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.rail-value {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 550;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  white-space: pre-wrap;
+  word-spacing: 0.1em;
+}
+
+.rail-notes {
+  min-height: 2.7em;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  transition: opacity 100ms ease-out;
+}
+
+.rail-notes.is-fading {
+  opacity: 0;
+}
+
+.rail-spacer {
+  flex: 1;
+}
+
+.panic-button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  min-height: 3rem;
+  padding: 0 var(--rail-pad);
+  border: 0;
+  border-top: 1px solid var(--hair);
+  white-space: nowrap;
+  background: transparent;
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 550;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+  text-align: left;
+  transition: background var(--dur-fade) ease, color var(--dur-fade) ease;
+}
+
+.panic-button kbd {
+  padding: 0.15rem 0.35rem;
+  border: 1px solid currentColor;
+  color: var(--muted);
+  font-family: var(--font-ui);
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  text-transform: lowercase;
+}
+
+@media (hover: hover) {
+  .panic-button:hover {
+    background: var(--ink);
+    color: var(--paper);
+  }
+
+  .panic-button:hover kbd {
+    color: var(--paper);
+  }
+}
+
+.panic-button:active {
+  background: var(--ink);
+  color: var(--paper);
+}
+
+/* Field: two shared-edge cells, chord over notation. Rows are fixed fractions so neither the chord
+   text nor the alternatives row can push the staff around. */
+.readout-area {
+  display: grid;
+  grid-template-rows: minmax(7rem, 0.42fr) minmax(9rem, 0.58fr);
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.field-cell {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.field-cell > .cell-label {
+  position: absolute;
+  top: 1rem;
+  left: var(--gutter);
+  z-index: 1;
+}
+
+.chord-cell {
+  border-bottom: 1px solid var(--hair);
 }
 
 .chord-readout {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) 26px;
+  grid-template-rows: minmax(0, 1fr) 1.6rem;
   align-items: end;
   justify-items: center;
-  row-gap: 10px;
-  min-height: 0;
+  row-gap: 0.4rem;
   height: 100%;
+  min-height: 0;
+  padding: 2.4rem var(--gutter) 1rem;
   text-align: center;
   opacity: 1;
   transition: opacity var(--fade-duration, 100ms) ease-out;
@@ -125,40 +502,51 @@ button {
   opacity: 0;
 }
 
+/* The h1 box top must stay below .field-cell's clip edge or Chillax's tall glyphs get cut (see the
+   AGENTS.md note on the readout clip). The 2.4rem readout padding is what holds that margin. */
 h1 {
-  margin: 0;
-  min-width: 6ch;
-  min-height: 0;
-  color: #171717;
-  font-size: clamp(2.3rem, 8.5vh, 5.6rem);
-  font-weight: 720;
-  letter-spacing: 0;
-  line-height: 1.1;
   display: flex;
   align-items: center;
   justify-content: center;
+  min-width: 6ch;
+  min-height: 0;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 10.5vh, 8.5rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+  white-space: nowrap;
 }
 
 .alternatives {
-  min-height: 26px;
-  color: #625e56;
+  min-height: 1.6rem;
+  color: var(--muted);
   font-size: 0.95rem;
-  line-height: 1.35;
+  font-weight: 500;
+  line-height: 1.6rem;
+  white-space: pre;
+}
+
+.staff-cell {
+  display: flex;
 }
 
 .work-area {
   display: flex;
   justify-content: center;
-  width: min(680px, 100%);
+  width: 100%;
   height: 100%;
   min-height: 0;
+  padding: 2rem var(--gutter) 0.75rem;
   overflow: hidden;
 }
 
 .notation-surface {
   display: flex;
   justify-content: center;
-  width: 100%;
+  width: min(60rem, 100%);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -166,7 +554,7 @@ h1 {
 
 .notation-surface svg {
   display: block;
-  width: min(640px, 100%);
+  width: 100%;
   height: 100%;
 }
 
@@ -188,33 +576,36 @@ h1 {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 9px;
   width: 100%;
-  color: #776f66;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 550;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
 }
+
+/* ---------- keyboard ---------- */
 
 .keyboard-section {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   justify-items: center;
-  gap: 12px;
+  gap: 0.75rem;
   min-height: 0;
-  /* No overflow clip here so the piano drop shadow can render; the app-shell still clips at the
-     window edge, so this does not introduce scrollbars. */
+  padding: 1rem var(--gutter) 0.9rem;
+  border-top: 1px solid var(--hair);
 }
 
+/* Flat keys, shared hairlines, no radius, no gloss. Held keys take the accent. */
 .piano {
   position: relative;
-  width: min(960px, 100%);
+  width: min(68rem, 100%);
   height: 100%;
-  min-height: 96px;
-  max-height: 280px;
+  min-height: 6rem;
+  max-height: 20rem;
   overflow: hidden;
-  border: 1px solid #1f1f1f;
-  border-radius: 6px;
-  background: #151515;
-  /* Scale the drop shadow with the viewport so it tracks the rest of the responsive layout. */
-  box-shadow: 0 clamp(5px, 1.7vh, 18px) clamp(14px, 4.2vh, 42px) rgba(25, 22, 18, 0.16);
+  border: 1px solid var(--ink);
+  background: var(--ink);
 }
 
 .white-key-row {
@@ -229,12 +620,12 @@ h1 {
   justify-content: center;
   min-width: 0;
   height: 100%;
-  padding-bottom: 12px;
-  border-right: 1px solid #bdb8ad;
-  background: #f7f4ee;
-  color: #4f4a43;
-  font-size: 0.76rem;
-  font-weight: 700;
+  padding-bottom: 0.7rem;
+  border-right: 1px solid var(--hair-strong);
+  background: var(--key-white);
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 600;
   cursor: pointer;
   touch-action: none;
   user-select: none;
@@ -245,8 +636,8 @@ h1 {
 }
 
 .white-key.is-active {
-  background: #d63b35;
-  color: #fff8f5;
+  background: var(--accent);
+  color: var(--paper);
 }
 
 .black-key-row {
@@ -261,14 +652,12 @@ h1 {
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  height: 64%;
-  padding-bottom: 10px;
-  border: 1px solid #101010;
-  border-radius: 0 0 4px 4px;
-  background: #171717;
-  color: #f6eee0;
-  font-size: 0.7rem;
-  font-weight: 700;
+  height: 62%;
+  padding-bottom: 0.6rem;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.64rem;
+  font-weight: 600;
   z-index: 2;
   cursor: pointer;
   pointer-events: auto;
@@ -277,28 +666,59 @@ h1 {
 }
 
 .black-key.is-active {
-  background: #d63b35;
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+
+/* Range strip: a miniature 88 with the visible window outlined in ink. */
+.range-controls {
+  display: grid;
+  grid-template-columns: 2rem 2.6rem minmax(16rem, 32rem) 2.6rem 2rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: min(48rem, 100%);
+  min-width: 0;
+}
+
+.range-controls .icon-button {
+  width: 2rem;
+  height: 2rem;
+}
+
+.range-end-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.keyboard-range-slider {
+  position: relative;
+  min-width: 0;
 }
 
 .range-overview {
   position: relative;
   width: 100%;
-  height: clamp(24px, 4.4vh, 38px);
+  height: clamp(1.4rem, 3.6vh, 2.2rem);
   overflow: hidden;
-  border: 1px solid #c8c2b8;
-  border-radius: 5px;
-  background: #fcfbf8;
+  border: 1px solid var(--hair-strong);
+  background: var(--key-white);
 }
 
 .range-window {
   position: absolute;
   top: 0;
   bottom: 0;
-  z-index: 1;
-  border-left: 2px solid #34312d;
-  border-right: 2px solid #34312d;
-  background: rgba(52, 49, 45, 0.12);
+  z-index: 3;
+  outline: 1.5px solid var(--ink);
+  outline-offset: -1.5px;
+  background: rgba(20, 20, 20, 0.06);
   pointer-events: none;
+  transition: left .35s var(--ease-house), width .35s var(--ease-house);
 }
 
 .mini-white-row {
@@ -308,16 +728,16 @@ h1 {
 
 .mini-white-key {
   height: 100%;
-  border-right: 1px solid #ddd8cf;
-  background: #faf8f3;
+  border-right: 1px solid var(--hair);
+  background: var(--key-white);
 }
 
 .mini-white-key.is-in-range {
-  background: #eee8dc;
+  background: var(--paper-2);
 }
 
 .mini-white-key.is-active {
-  background: #d93d36;
+  background: var(--accent);
 }
 
 .mini-black-row {
@@ -331,68 +751,21 @@ h1 {
   top: 0;
   z-index: 2;
   height: 58%;
-  border-radius: 0 0 2px 2px;
-  background: #242424;
+  background: #3a3a37;
 }
 
 .mini-black-key.is-in-range {
-  background: #141414;
+  background: var(--ink);
 }
 
 .mini-black-key.is-active {
-  background: #d93d36;
-}
-
-.range-controls {
-  display: grid;
-  grid-template-columns: 36px 44px minmax(280px, 520px) 44px 36px;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: min(760px, 100%);
-  min-width: 0;
-}
-
-.icon-button,
-.mute-button,
-.settings-button,
-.drawer-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #c9c3b9;
-  background: #fbfaf6;
-  color: #2b2925;
-}
-
-.icon-button {
-  width: 36px;
-  height: 36px;
-  border-radius: 7px;
-}
-
-.icon-button:hover,
-.mute-button:hover,
-.settings-button:hover,
-.drawer-close:hover {
-  background: #f1eee6;
-}
-
-.keyboard-range-slider {
-  position: relative;
-  min-width: 0;
-}
-
-.range-end-label {
-  color: #4a453f;
-  font-size: 0.86rem;
-  font-weight: 750;
-  text-align: center;
+  background: var(--accent);
 }
 
 .range-slider-overlay {
   position: absolute;
   inset: 0;
+  z-index: 4;
   width: 100%;
   height: 100%;
   margin: 0;
@@ -400,81 +773,54 @@ h1 {
   cursor: pointer;
 }
 
-.control-strip {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 12px;
-  min-height: 0;
-  flex-wrap: wrap;
-}
+/* ---------- drawers ---------- */
 
-.control-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.control-group input {
-  width: clamp(96px, 14vw, 170px);
-}
-
-.volume-slider {
-  accent-color: #d63b35;
-}
-
-.mute-button,
-.settings-button {
-  gap: 8px;
-  height: 38px;
-  padding: 0 12px;
-  border-radius: 7px;
-}
-
-.mute-button {
-  min-width: 104px;
-}
-
-.mute-button.is-muted {
-  border-color: #c98364;
-  color: #7a3e24;
-}
-
-.panel-buttons {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-}
-
+/* A sheet hung off the right edge under the top bar. Non-modal by design (see AGENTS.md): the app
+   stays playable behind it. It scrolls, because the MIDI device list is unbounded. */
 .settings-drawer {
   position: fixed;
-  top: 18px;
-  right: 18px;
+  top: var(--nav-h);
+  right: 0;
+  bottom: 0;
   z-index: 10;
-  display: grid;
-  gap: 15px;
-  width: 320px;
-  padding: 18px;
-  border: 1px solid #c9c3b9;
-  border-radius: 8px;
-  background: #fbfaf6;
-  box-shadow: 0 24px 70px rgba(25, 22, 18, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: min(var(--drawer-w), 100vw);
+  max-height: calc(100dvh - var(--nav-h));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-left: 1px solid var(--hair);
+  background: var(--paper);
+  box-shadow: -1.5rem 0 3rem rgba(20, 20, 20, 0.06);
+  animation: drawer-in .3s var(--ease-house);
 }
 
-.settings-title,
-.settings-drawer label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: #4e4942;
-  font-size: 0.9rem;
+@keyframes drawer-in {
+  from { transform: translateX(1.5rem); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settings-drawer { animation: none; }
+  .range-window { transition: none; }
 }
 
 .settings-title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
-  font-weight: 780;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--hair);
+  background: var(--paper);
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .settings-title span {
@@ -482,175 +828,158 @@ h1 {
 }
 
 .drawer-close {
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
+  width: 2rem;
+  height: 2rem;
 }
 
-.settings-drawer label {
+.settings-drawer > label,
+.settings-drawer > .midi-device-list,
+.settings-drawer > .help-section {
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid var(--hair);
+}
+
+.settings-drawer > label {
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 500;
 }
 
 .help-section {
   display: grid;
-  gap: 5px;
-  color: #4e4942;
+  gap: 0.35rem;
 }
 
 .help-section strong {
-  font-size: 0.84rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 550;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
 }
 
 .help-section p {
   margin: 0;
-  color: #6b655d;
-  font-size: 0.9rem;
-  line-height: 1.35;
+  color: var(--ink);
+  font-size: 0.92rem;
+  line-height: 1.45;
 }
 
 select {
-  height: 34px;
-  min-width: 130px;
-  border: 1px solid #c9c3b9;
-  border-radius: 7px;
-  background: #fff;
-  color: #2b2925;
+  height: 2.1rem;
+  min-width: 8.5rem;
+  max-width: 13rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--hair-strong);
+  border-radius: 0;
+  background: var(--key-white);
+  color: var(--ink);
+  font-size: 0.85rem;
 }
 
 .checkbox-label {
-  justify-content: flex-start;
+  justify-content: flex-start !important;
+  cursor: pointer;
 }
 
 .checkbox-label input {
-  accent-color: #2f8d7c;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
+.midi-device-list {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--hair);
+}
+
+.midi-device-list legend {
+  float: left;
+  width: 100%;
+  margin-bottom: 0.15rem;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 550;
+  letter-spacing: var(--track-caps);
+  text-transform: uppercase;
+}
+
+.midi-device-list .checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.9rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+/* Full screen is the stage mode: the keyboard spans the window and gets taller. */
+.app-shell.is-full-screen .piano {
+  width: 100%;
+  max-height: 26rem;
+}
+
+.app-shell.is-full-screen .range-controls {
+  width: min(64rem, 100%);
+  grid-template-columns: 2rem 2.6rem minmax(16rem, 1fr) 2.6rem 2rem;
+}
+
+/* Wide windows: an open drawer pushes the instrument over instead of covering it, so changing the
+   chord style or spelling shows its effect on the chord you are holding. Narrow windows overlay. */
+@media (min-width: 1100px) {
+  .app-shell.has-drawer {
+    padding-right: var(--drawer-w);
+  }
+
+  .app-shell.has-drawer .topbar {
+    margin-right: calc(var(--drawer-w) * -1);
+  }
+}
+
+/* ---------- small windows ---------- */
+
 @media (max-width: 980px) {
-  body {
-    min-width: 0;
-  }
-
-  .app-shell {
-    padding: 12px;
-    gap: 10px;
-  }
-
-  .app-chrome {
-    align-items: flex-start;
+  .status-pill span:last-child {
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .control-strip {
-    flex-direction: row;
-    align-items: center;
-  }
-
-  .status-cluster {
-    justify-content: flex-start;
+    gap: 0.5rem;
   }
 
   .range-controls {
-    grid-template-columns: 36px 44px 1fr 44px 36px;
-  }
-
-  .panel-buttons {
-    justify-content: flex-end;
-  }
-
-  h1 {
-    font-size: clamp(2.3rem, 8vh, 4.8rem);
-  }
-
-  .settings-drawer {
-    left: 18px;
-    width: auto;
+    grid-template-columns: 2rem 2.6rem 1fr 2.6rem 2rem;
   }
 }
 
 @media (max-height: 720px) {
   .app-shell {
-    grid-template-rows: auto minmax(0, 1fr) minmax(112px, 30vh);
-    gap: 8px;
-    padding-top: 10px;
-    padding-bottom: 10px;
+    grid-template-rows: var(--nav-h) minmax(0, 1fr) minmax(7.5rem, 29vh);
   }
 
-  .app-title {
-    font-size: 0.76rem;
+  .rail-cell {
+    padding-top: 0.8rem;
+    padding-bottom: 0.85rem;
   }
 
-  .app-chrome {
-    align-items: flex-start;
-    justify-content: space-between;
-  }
-
-  .status-cluster {
-    justify-content: flex-start;
-  }
-
-  .status-pill {
-    min-height: 28px;
-    padding: 4px 8px;
-    font-size: 0.78rem;
-  }
-
-  .chord-readout {
-    grid-template-rows: minmax(0, 1fr) 22px;
-    row-gap: 2px;
-  }
-
-  .readout-area {
-    grid-template-rows: minmax(72px, 0.26fr) minmax(170px, 0.74fr);
-    gap: 2px;
+  .keyboard-section {
+    padding-top: 0.75rem;
+    padding-bottom: 0.7rem;
+    gap: 0.55rem;
   }
 
   h1 {
-    font-size: clamp(2rem, 7.5vh, 4.2rem);
-  }
-
-  .alternatives {
-    min-height: 22px;
-    font-size: 0.86rem;
-  }
-
-  .piano {
-    min-height: 84px;
-    max-height: 210px;
-  }
-
-  .range-controls {
-    grid-template-columns: 32px 40px minmax(160px, 1fr) 40px 32px;
-  }
-
-  .icon-button {
-    width: 32px;
-    height: 32px;
-  }
-
-  .control-strip {
-    flex-direction: row;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    padding-top: 0;
-    border-top: 0;
-  }
-
-  .control-group {
-    min-width: 0;
-    gap: 8px;
-  }
-
-  .control-group input {
-    width: 96px;
-  }
-
-  .mute-button,
-  .settings-button {
-    height: 30px;
-    padding: 0 9px;
-  }
-
-  .panel-buttons {
-    gap: 8px;
+    font-size: clamp(2.3rem, 9.5vh, 6rem);
   }
 }

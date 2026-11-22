@@ -1,4 +1,4 @@
-import { CircleHelp, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useDrawerDialog } from '../hooks/useDrawerDialog';
 
 type HelpDrawerProps = {
@@ -18,7 +18,6 @@ export function HelpDrawer({ onClose }: HelpDrawerProps) {
       onKeyDown={onKeyDown}
     >
       <div className="settings-title">
-        <CircleHelp size={17} />
         <span>Help</span>
         <button className="drawer-close" type="button" onClick={onClose} aria-label="Close help">
           <X size={17} />
@@ -36,8 +35,18 @@ export function HelpDrawer({ onClose }: HelpDrawerProps) {
       </div>
 
       <div className="help-section">
+        <strong>All notes off</strong>
+        <p>Esc releases every held note. Use it if a note ever sticks.</p>
+      </div>
+
+      <div className="help-section">
+        <strong>Full screen</strong>
+        <p>Use the button at the top right, or Ctrl ⌘ F.</p>
+      </div>
+
+      <div className="help-section">
         <strong>MIDI</strong>
-        <p>All connected MIDI inputs are listened to automatically.</p>
+        <p>Connected MIDI inputs are listened to automatically. DAW-control ports are skipped. Choose devices in Settings.</p>
       </div>
     </aside>
   );

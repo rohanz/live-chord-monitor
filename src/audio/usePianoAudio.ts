@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { midiToFrequency } from '../music/notes';
+import type { NoteStore } from '../input/noteStore';
 
 /**
  * Overall headroom applied on top of the user volume so stacked voices do not clip.
@@ -32,6 +33,7 @@ const VOLUME_TIME_CONSTANT = 0.015;
 type Voice = {
   oscillators: OscillatorNode[];
   gain: GainNode;
+  startedAt: number;
 };
 
 /**
@@ -156,7 +158,7 @@ function createPianoEngine() {
       oscA.start(now);
       oscB.start(now);
 
-      voices.set(note, { oscillators: [oscA, oscB], gain });
+      voices.set(note, { oscillators: [oscA, oscB], gain, startedAt: now });
     },
 
     stopNote(note: number) {
@@ -168,7 +170,20 @@ function createPianoEngine() {
 
       const now = context ? context.currentTime : 0;
 
-      voice.gain.gain.cancelScheduledValues(now);
+      const envelope = voice.gain.gain;
+      if (typeof envelope.cancelAndHoldAtTime === 'function') {
+        envelope.cancelAndHoldAtTime(now);
+      } else {
+        // Preserve the analytic attack/decay value on older Web Audio implementations.
+        // AudioParam.value alone is not a reliable readback of scheduled automation.
+        const elapsed = Math.max(0, now - voice.startedAt);
+        const value = elapsed < ATTACK_S
+          ? MIN_GAIN * Math.pow(1 / MIN_GAIN, elapsed / ATTACK_S)
+          : elapsed < DECAY_START_S ? 1
+            : SUSTAIN_LEVEL + (1 - SUSTAIN_LEVEL) * Math.exp(-(elapsed - DECAY_START_S) / DECAY_TIME_CONSTANT);
+        envelope.cancelScheduledValues(now);
+        envelope.setValueAtTime(Math.max(MIN_GAIN, value), now);
+      }
       voice.gain.gain.setTargetAtTime(MIN_GAIN, now, RELEASE_TIME_CONSTANT);
 
       // Deleting the map entry now (while the timer closes over the OLD voice) is what makes
@@ -211,11 +226,10 @@ function createPianoEngine() {
 
 type PianoEngine = ReturnType<typeof createPianoEngine>;
 
-export function usePianoAudio(activeNotes: number[], volume: number, muted: boolean) {
+export function usePianoAudio(notes: NoteStore, volume: number, muted: boolean) {
   // useState (not useRef) purely so the engine is created exactly once and can be read during
   // render without touching a ref mid-render. It is never set again.
   const [engine] = useState<PianoEngine>(createPianoEngine);
-  const activeRef = useRef<Set<number>>(new Set());
 
   // Declared FIRST on purpose: effects run in order, so the engine knows the current level before
   // the note effect below can create the AudioContext. A context built later (by a gesture or by
@@ -225,23 +239,15 @@ export function usePianoAudio(activeNotes: number[], volume: number, muted: bool
   }, [engine, muted, volume]);
 
   useEffect(() => {
-    const nextActive = new Set(activeNotes);
-    const previousActive = activeRef.current;
-
-    for (const note of nextActive) {
-      if (!previousActive.has(note)) {
-        engine.startNote(note);
-      }
-    }
-
-    for (const note of previousActive) {
-      if (!nextActive.has(note)) {
-        engine.stopNote(note);
-      }
-    }
-
-    activeRef.current = nextActive;
-  }, [activeNotes, engine]);
+    // Observe source-count edges synchronously, so off/on and complete short notes
+    // cannot disappear when React batches identical pitch snapshots.
+    const unsubscribe = notes.subscribeTransitions(({ type, note }) => {
+      if (type === 'on') engine.startNote(note);
+      else engine.stopNote(note);
+    });
+    for (const note of notes.getSnapshot()) engine.startNote(note);
+    return unsubscribe;
+  }, [notes, engine]);
 
   useEffect(() => {
     const prime = () => engine.prime();
@@ -258,7 +264,6 @@ export function usePianoAudio(activeNotes: number[], volume: number, muted: bool
   useEffect(() => {
     return () => {
       engine.dispose();
-      activeRef.current = new Set();
     };
   }, [engine]);
 }

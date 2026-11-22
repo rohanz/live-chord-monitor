@@ -196,6 +196,39 @@ describe('App', () => {
     expect(screen.getByTestId('staff')).toHaveAttribute('data-notes', '73,74');
   });
 
+  it('releases every held note from the All notes off button and from Escape', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+    const litKeys = () => container.querySelectorAll('.white-key.is-active, .black-key.is-active').length;
+
+    fireEvent.keyDown(window, { code: 'KeyA' });
+    fireEvent.keyDown(window, { code: 'KeyD' });
+    expect(litKeys()).toBe(2);
+    await user.click(screen.getByRole('button', { name: /all notes off/i }));
+    expect(litKeys()).toBe(0);
+
+    // A later keyup for a key that was force-released must be a harmless no-op.
+    fireEvent.keyUp(window, { code: 'KeyA' });
+    fireEvent.keyUp(window, { code: 'KeyD' });
+
+    fireEvent.keyDown(window, { code: 'KeyG' });
+    expect(litKeys()).toBe(1);
+    fireEvent.keyDown(window, { code: 'Escape' });
+    expect(litKeys()).toBe(0);
+  });
+
+  it('names held notes in the rail with the chord-aware spelling the staff uses', () => {
+    render(<App />);
+
+    // C, Eb, G, Bb: Cm7, so the default sharp spelling must not show D#/A#.
+    fireEvent.keyDown(window, { code: 'KeyA' });
+    fireEvent.keyDown(window, { code: 'KeyE' });
+    fireEvent.keyDown(window, { code: 'KeyG' });
+    fireEvent.keyDown(window, { code: 'KeyU' });
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('Cm7');
+    expect(screen.getByLabelText('Session')).toHaveTextContent('C4 E♭4 G4 B♭4');
+  });
+
   it('stops computer-keyboard notes when the setting is turned off', async () => {
     const user = userEvent.setup();
     render(<App />);
@@ -498,6 +531,8 @@ describe('App', () => {
         'lcm:computerKeyboardNotes',
         'lcm:inversionMode',
         'lcm:lingerMs',
+        'lcm:midiInputOverrides',
+        'lcm:midiInputOverridesById',
         'lcm:muted',
         'lcm:nameStyle',
         'lcm:notationEnabled',
@@ -681,6 +716,100 @@ describe('App', () => {
     });
   });
 
+  it('ignores notes from DAW control ports like Launchkey InControl', async () => {
+    // Real capture from a Launchkey MK2 25: on connect its "InControl" DAW port
+    // sends note-on ch16 note 12 (a low C) with no matching note-off, which
+    // displayed as a stuck low C.
+    const keys = makeMidiInput('keys');
+    keys.name = 'Launchkey MK2 25 Launchkey MIDI';
+    const inControl = makeMidiInput('incontrol');
+    inControl.name = 'Launchkey MK2 25 Launchkey InControl';
+    installMidiMock([keys, inControl]);
+    const { container } = render(<App />);
+
+    await waitFor(() => expect(screen.getByText('2 MIDI inputs')).toBeInTheDocument());
+
+    act(() => {
+      inControl.onmidimessage?.(midiMessage([0x9f, 12, 127], inControl));
+    });
+    // Note 12 sits below the 88-key overview, so assert where the stuck C
+    // actually appeared: the chord readout and the staff.
+    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('');
+    expect(screen.getByTestId('staff')).toHaveAttribute('data-notes', '');
+
+    // The real keys port keeps working.
+    act(() => {
+      keys.onmidimessage?.(midiMessage([0x90, 60, 100], keys));
+    });
+    expect(activeNotes(container)).toEqual([60]);
+  });
+
+  describe('per-device MIDI input toggles', () => {
+    function launchkeyPorts() {
+      const keys = makeMidiInput('keys');
+      keys.name = 'Launchkey MK2 25 Launchkey MIDI';
+      const inControl = makeMidiInput('incontrol');
+      inControl.name = 'Launchkey MK2 25 Launchkey InControl';
+      return { keys, inControl };
+    }
+
+    it('lists inputs in Settings with control ports unchecked by default', async () => {
+      const { keys, inControl } = launchkeyPorts();
+      installMidiMock([keys, inControl]);
+      const user = userEvent.setup();
+      render(<App />);
+
+      await waitFor(() => expect(screen.getByText('2 MIDI inputs')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+      const settings = within(screen.getByLabelText('Settings panel'));
+
+      expect((settings.getByLabelText(keys.name) as HTMLInputElement).checked).toBe(true);
+      expect((settings.getByLabelText(inControl.name) as HTMLInputElement).checked).toBe(false);
+    });
+
+    it('re-enabling a control port lets its notes through, and the choice persists', async () => {
+      const { keys, inControl } = launchkeyPorts();
+      installMidiMock([keys, inControl]);
+      const user = userEvent.setup();
+      render(<App />);
+
+      await waitFor(() => expect(screen.getByText('2 MIDI inputs')).toBeInTheDocument());
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+      await user.click(within(screen.getByLabelText('Settings panel')).getByLabelText(inControl.name));
+
+      await waitFor(() => expect(inControl.onmidimessage).toBeTruthy());
+      act(() => {
+        inControl.onmidimessage?.(midiMessage([0x9f, 12, 127], inControl));
+      });
+      expect(screen.getByTestId('staff')).toHaveAttribute('data-notes', '12');
+
+      expect(JSON.parse(window.localStorage.getItem('lcm:midiInputOverridesById') as string))
+        .toEqual({ [inControl.id]: true });
+    });
+
+    it('disabling a keys port releases its held notes and ignores further ones', async () => {
+      const { keys } = launchkeyPorts();
+      installMidiMock([keys]);
+      const user = userEvent.setup();
+      const { container } = render(<App />);
+
+      await waitFor(() => expect(screen.getByText('1 MIDI input')).toBeInTheDocument());
+      act(() => {
+        keys.onmidimessage?.(midiMessage([0x90, 60, 100], keys));
+      });
+      expect(activeNotes(container)).toEqual([60]);
+
+      await user.click(screen.getByRole('button', { name: 'Settings' }));
+      await user.click(within(screen.getByLabelText('Settings panel')).getByLabelText(keys.name));
+
+      await waitFor(() => expect(activeNotes(container)).toEqual([]));
+      act(() => {
+        keys.onmidimessage?.(midiMessage([0x90, 62, 100], keys));
+      });
+      expect(activeNotes(container)).toEqual([]);
+    });
+  });
+
   it('releases notes still held by a MIDI device when it disconnects', async () => {
     const input = makeMidiInput();
     const { access } = installMidiMock([input]);
@@ -701,4 +830,113 @@ describe('App', () => {
     });
     expect(container.querySelectorAll('.white-key.is-active, .black-key.is-active').length).toBe(0);
   });
+});
+
+// Use real, distinct pointer IDs even on jsdom's MouseEvent-based PointerEvent fallback.
+function pointer(target: Window | Element, type: string, pointerId: number) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  Object.defineProperty(event, 'pointerId', { value: pointerId });
+  fireEvent(target, event);
+}
+
+describe('review input regressions', () => {
+  beforeEach(() => { window.localStorage.clear(); installMidiMock(); });
+
+  it.each(['Keys', ''])('independently switches duplicate MIDI endpoints named %j', async (name) => {
+    const a = makeMidiInput('A');
+    const b = makeMidiInput('B');
+    a.name = b.name = name;
+    installMidiMock([a, b]);
+    const { container } = render(<App />);
+    await waitFor(() => expect(a.onmidimessage).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const label = name || 'MIDI input';
+    const switches = within(screen.getByLabelText('Settings panel')).getAllByRole('checkbox', { name: new RegExp(`^${label}`) });
+    expect(switches).toHaveLength(2);
+    fireEvent.click(switches[0]);
+    act(() => { a.onmidimessage?.(midiMessage([0x90, 60, 100], a)); b.onmidimessage?.(midiMessage([0x90, 64, 100], b)); });
+    expect(activeNotes(container)).toEqual([64]);
+    expect(switches[0]).not.toBeChecked();
+    expect(switches[1]).toBeChecked();
+    expect(switches[0].closest('label')?.textContent).not.toEqual(switches[1].closest('label')?.textContent);
+  });
+
+  it('keeps an explicitly disabled MIDI ID disabled after its name changes', async () => {
+    const a = makeMidiInput('A');
+    const { access } = installMidiMock([a]);
+    render(<App />);
+    await waitFor(() => expect(a.onmidimessage).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    fireEvent.click(screen.getByLabelText(a.name));
+    act(() => { a.name = 'Renamed Keys'; access.onstatechange?.({ port: a } as unknown as MIDIConnectionEvent); });
+    expect(screen.getByLabelText(a.name)).not.toBeChecked();
+    expect(a.onmidimessage).toBeNull();
+  });
+
+  it('migrates unique legacy name overrides to IDs and retains them on rename', async () => {
+    window.localStorage.setItem('lcm:midiInputOverrides', JSON.stringify({ Unique: false }));
+    const a = makeMidiInput('unique-id');
+    a.name = 'Unique';
+    const { access } = installMidiMock([a]);
+    render(<App />);
+    await waitFor(() => expect(screen.getByText('1 MIDI input')).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    expect(screen.getByLabelText('Unique')).not.toBeChecked();
+    act(() => { a.name = 'Renamed'; access.onstatechange?.({ port: a } as unknown as MIDIConnectionEvent); });
+    expect(screen.getByLabelText('Renamed')).not.toBeChecked();
+  });
+
+  it('does not migrate an ambiguous legacy name onto two independent endpoints', async () => {
+    window.localStorage.setItem('lcm:midiInputOverrides', JSON.stringify({ Keys: false }));
+    const a = makeMidiInput('A');
+    const b = makeMidiInput('B');
+    a.name = b.name = 'Keys';
+    installMidiMock([a, b]);
+    render(<App />);
+    await waitFor(() => expect(a.onmidimessage).toBeTruthy());
+    expect(b.onmidimessage).toBeTruthy();
+  });
+
+  it('releases a lost pointer hold before reusing its pointer ID on another key', async () => {
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByText('0 MIDI inputs')).toBeInTheDocument());
+    const keys = container.querySelectorAll('.white-key');
+    pointer(keys[0], 'pointerdown', 7);
+    expect(activeNotes(container)).toEqual([48]);
+    pointer(keys[1], 'pointerdown', 7);
+    expect(activeNotes(container)).toEqual([50]);
+    pointer(window, 'pointerup', 7);
+    expect(activeNotes(container)).toEqual([]);
+  });
+
+  it('retains independent pointer sources when two fingers hold the same key', async () => {
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByText('0 MIDI inputs')).toBeInTheDocument());
+    const key = container.querySelector('.white-key')!;
+    pointer(key, 'pointerdown', 1);
+    pointer(key, 'pointerdown', 2);
+    pointer(window, 'pointerup', 1);
+    expect(activeNotes(container)).toEqual([48]);
+    pointer(window, 'pointercancel', 2);
+    expect(activeNotes(container)).toEqual([]);
+  });
+
+  it.each(['blur', 'hidden'])('releases all pointer holds on %s', async (event) => {
+    const { container } = render(<App />);
+    await waitFor(() => expect(screen.getByText('0 MIDI inputs')).toBeInTheDocument());
+    const keys = container.querySelectorAll('.white-key');
+    pointer(keys[0], 'pointerdown', 1);
+    pointer(keys[1], 'pointerdown', 2);
+    expect(activeNotes(container)).toEqual([48, 50]);
+    if (event === 'blur') fireEvent.blur(window);
+    else {
+      const original = Object.getOwnPropertyDescriptor(document, 'visibilityState');
+      Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' });
+      fireEvent(document, new Event('visibilitychange'));
+      if (original) Object.defineProperty(document, 'visibilityState', original);
+      else Reflect.deleteProperty(document, 'visibilityState');
+    }
+    expect(activeNotes(container)).toEqual([]);
+  });
+
 });

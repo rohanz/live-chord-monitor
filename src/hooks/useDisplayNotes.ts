@@ -30,19 +30,23 @@ export function useDisplayNotes(activeNotes: number[], lingerMs: number): Displa
    * press arriving then is a brand new chord, never a release-only reduction of the stale one.
    */
   const displayIsLiveRef = useRef(false);
+  const previousHeldNotesRef = useRef<number[]>([]);
 
   useEffect(() => {
     displayNotesRef.current = displayNotes;
   }, [displayNotes]);
 
   useEffect(() => {
+    const previousHeldNotes = previousHeldNotesRef.current;
+    previousHeldNotesRef.current = activeNotes;
+
     if (activeNotes.length > 0) {
       setFading(false);
 
       const currentDisplayNotes = displayNotesRef.current;
       const isReleaseOnlyChange = displayIsLiveRef.current
         && activeNotes.length < currentDisplayNotes.length
-        && activeNotes.every((note) => currentDisplayNotes.includes(note));
+        && activeNotes.every((note) => previousHeldNotes.includes(note));
 
       if (!isReleaseOnlyChange) {
         displayIsLiveRef.current = true;

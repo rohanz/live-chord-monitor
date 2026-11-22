@@ -1,10 +1,10 @@
-import { app, BrowserWindow, protocol, session, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, protocol, session, shell } from 'electron';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+const isDev = !app.isPackaged;
 const rendererDist = path.join(__dirname, '../dist');
 const APP_ORIGIN = 'app://bundle';
 const DEV_ORIGIN = 'http://localhost:5173';
@@ -81,8 +81,10 @@ function registerAppProtocol() {
 /** The only origin the renderer is ever allowed to sit on: app://bundle in prod, Vite in dev. */
 function isAllowedOrigin(url: string): boolean {
   try {
-    const { origin } = new URL(url);
-    return origin === APP_ORIGIN || (isDev && origin === DEV_ORIGIN);
+    const parsed = new URL(url);
+    // Node reports origin === 'null' for custom schemes; compare their protocol and host directly.
+    return (parsed.protocol === 'app:' && parsed.host === 'bundle')
+      || (isDev && parsed.origin === DEV_ORIGIN);
   } catch {
     return false;
   }
@@ -108,7 +110,11 @@ function createMainWindow() {
     minWidth: 820,
     minHeight: 680,
     title: 'Live Chord Monitor',
-    backgroundColor: '#f7f4ee',
+    backgroundColor: '#f7f5f0',
+    // The renderer's own top bar runs edge to edge under the traffic lights (it is the drag region
+    // and leaves room for them), so there is no grey system title strip above the paper surface.
+    titleBarStyle: 'hiddenInset',
+    trafficLightPosition: { x: 20, y: 21 },
     // Do not show an empty frame while the renderer is still booting. Without this the window is
     // mapped as soon as it is constructed - roughly 230ms before the first paint - so the app looks
     // open and ready while it is still incapable of registering a note.
@@ -146,6 +152,11 @@ function createMainWindow() {
     }
   });
 
+  // Tell the renderer about every full-screen transition, whatever started it (in-app button, green
+  // traffic light, Ctrl+Cmd+F, or Esc leaving the space).
+  win.on('enter-full-screen', () => win.webContents.send('lcm:full-screen-changed', true));
+  win.on('leave-full-screen', () => win.webContents.send('lcm:full-screen-changed', false));
+
   // Registered before the dev early-return: the window is created with `show: false`, so this is
   // the only thing that ever makes it visible, in BOTH dev and packaged builds.
   win.once('ready-to-show', () => {
@@ -165,6 +176,16 @@ app.whenReady().then(() => {
   if (!isDev) {
     registerAppProtocol();
   }
+
+  // Registered once (not per window): ipcMain.handle throws on a second registration for a channel.
+  ipcMain.handle('lcm:toggle-full-screen', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return false;
+    const next = !win.isFullScreen();
+    win.setFullScreen(next);
+    return next;
+  });
+  ipcMain.handle('lcm:is-full-screen', (event) => BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false);
 
   createMainWindow();
 

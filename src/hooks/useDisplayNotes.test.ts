@@ -207,3 +207,15 @@ describe('useDisplayNotes', () => {
     expect(errorSpy).not.toHaveBeenCalled();
   });
 });
+
+it('shows a re-added tone during release settling and lingers the last physical voicing', () => {
+  vi.useFakeTimers();
+  const { result, rerender } = setup([60, 64, 67], 500);
+  rerender({ activeNotes: [60], lingerMs: 500 });
+  act(() => vi.advanceTimersByTime(30));
+  rerender({ activeNotes: [60, 64], lingerMs: 500 });
+  expect(result.current.displayNotes).toEqual([60, 64]);
+  rerender({ activeNotes: [], lingerMs: 500 });
+  expect(result.current.displayNotes).toEqual([60, 64]);
+  vi.useRealTimers();
+});

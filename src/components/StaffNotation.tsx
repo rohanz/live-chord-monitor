@@ -1,7 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Accidental, Renderer, Stave, StaveConnector, StaveNote, TickContext } from 'vexflow';
 import type { ChordCandidate } from '../music/chords';
-import { MIDDLE_C, midiToOctave, midiToPitchClass, pitchClassName } from '../music/notes';
+import { MIDDLE_C } from '../music/notes';
+import { midiToVexKey } from '../music/spelling';
+
+// Re-exported so existing imports (and tests) of the staff spelling keep working.
+export { midiToVexKey };
 
 type StaffNotationProps = {
   notes: number[];
@@ -9,10 +13,6 @@ type StaffNotationProps = {
   fading: boolean;
 };
 
-type VexKey = {
-  key: string;
-  accidental: string | null;
-};
 
 export function centeredNoteheadTickX(staveCenterX: number, currentTickX: number, noteheadBeginX: number, noteheadEndX: number): number {
   const noteheadCenterX = (noteheadBeginX + noteheadEndX) / 2;
@@ -93,6 +93,15 @@ export function StaffNotation({ notes, chord, fading }: StaffNotationProps) {
     const renderer = new Renderer(container, Renderer.Backends.SVG);
     renderer.resize(width, height);
 
+    // VexFlow pins the SVG with an inline px width/height. Drop it so the CSS box (plus the viewBox
+    // VexFlow also sets) scales the whole staff uniformly. In a large window or full screen the staff
+    // then grows with its cell instead of staying capped at 640x242.
+    const svg = container.querySelector('svg');
+    if (svg) {
+      svg.style.removeProperty('width');
+      svg.style.removeProperty('height');
+    }
+
     const context = renderer.getContext();
     const treble = new Stave(24, Math.max(16, Math.round(height * 0.08)), width - 48);
     const bass = new Stave(24, Math.round(height * 0.50), width - 48);
@@ -112,14 +121,22 @@ export function StaffNotation({ notes, chord, fading }: StaffNotationProps) {
     const trebleNotes = notes.filter((note) => note >= MIDDLE_C).sort((a, b) => a - b);
     const bassNotes = notes.filter((note) => note < MIDDLE_C).sort((a, b) => a - b);
 
-    drawChord(trebleNotes, 'treble', treble, width, chord);
-    drawChord(bassNotes, 'bass', bass, width, chord);
+    const bounds = [
+      drawChord(trebleNotes, 'treble', treble, chord),
+      drawChord(bassNotes, 'bass', bass, chord),
+    ];
+    // Keep normal-range geometry unchanged. For ledger notes outside the cell, expand the viewBox
+    // to the actual written bounds (including accidentals), so SVG's uniform scaling fits them.
+    const padding = 12;
+    const top = Math.min(0, ...bounds.map((box) => box ? box.getY() - padding : 0));
+    const bottom = Math.max(height, ...bounds.map((box) => box ? box.getY() + box.getH() + padding : height));
+    svg?.setAttribute('viewBox', `0 ${top} ${width} ${bottom - top}`);
   }, [notes, chord, size.height, size.width]);
 
   return <div className={`notation-surface ${fading ? 'is-fading' : ''}`} ref={containerRef} />;
 }
 
-function drawChord(notes: number[], clef: 'treble' | 'bass', stave: Stave, width: number, chord: ChordCandidate | null) {
+function drawChord(notes: number[], clef: 'treble' | 'bass', stave: Stave, chord: ChordCandidate | null) {
   if (notes.length === 0) {
     return;
   }
@@ -150,49 +167,5 @@ function drawChord(notes: number[], clef: 'treble' | 'bass', stave: Stave, width
     staveNote.getNoteHeadEndX(),
   ));
   staveNote.draw();
-}
-
-/** Pitch class of each natural letter, used to detect spellings that cross the B/C octave seam. */
-const LETTER_PITCH_CLASSES: Record<string, number> = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
-
-/**
- * The octave a spelling is *written* in, which is not always the MIDI octave. MIDI octaves break at
- * C, but spellings can cross that seam: B#3 sounds as MIDI 60 (C4) and Cb4 sounds as MIDI 59 (B3).
- * Taking the letter from the spelling and the octave from MIDI would then place the note a seventh
- * away. Spellings that stay inside their MIDI octave (including Bbb) are unaffected.
- */
-function spelledOctave(note: number, letter: string, accidental: string): number {
-  const alteration = accidental.split('').reduce((total, mark) => total + (mark === '#' ? 1 : -1), 0);
-  const soundingDegree = LETTER_PITCH_CLASSES[letter] + alteration;
-  const midiOctave = midiToOctave(note);
-
-  if (soundingDegree > 11) {
-    // e.g. B# / B##: the letter belongs to the octave below the pitch it sounds.
-    return midiOctave - 1;
-  }
-
-  if (soundingDegree < 0) {
-    // e.g. Cb / Cbb: the letter belongs to the octave above the pitch it sounds.
-    return midiOctave + 1;
-  }
-
-  return midiOctave;
-}
-
-export function midiToVexKey(note: number, chord: ChordCandidate | null): VexKey {
-  const pitchClass = midiToPitchClass(note);
-  // Without chord context, fall back to flat spelling (matches conventional accidental display).
-  const spelled = chord?.spelling[pitchClass] ?? pitchClassName(pitchClass, true);
-  const match = spelled.match(/^([A-G])([b#]{0,2})$/);
-
-  if (!match) {
-    return { key: `c/${midiToOctave(note)}`, accidental: null };
-  }
-
-  const [, letter, accidental] = match;
-
-  return {
-    key: `${letter.toLowerCase()}/${spelledOctave(note, letter, accidental)}`,
-    accidental: accidental || null,
-  };
+  return staveNote.getBoundingBox();
 }

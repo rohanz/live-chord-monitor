@@ -1,25 +1,21 @@
-// Notarize + staple the built .dmg(s) so the disk image itself passes Gatekeeper on download
-// (electron-builder's afterSign hook already notarized+stapled the .app inside, but the .dmg is
-// produced afterward and needs its own ticket). Reuses the account-level `bqst-notary` profile.
+// Notarize + staple exactly the DMG produced by this release. The app is already notarized by
+// afterSign; the signed disk image is produced afterward and needs its own ticket.
 import { execFileSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const RELEASE = 'release';
-const profile = process.env.NOTARY_PROFILE || 'apple-notary';
-const dmgs = readdirSync(RELEASE)
-  .filter((f) => f.endsWith('.dmg'))
-  .map((f) => path.join(RELEASE, f));
-
-if (dmgs.length === 0) {
-  console.log('[notarize-dmg] no .dmg found, nothing to do.');
-  process.exit(0);
-}
-
-for (const dmg of dmgs) {
+export function notarizeDmg(dmg, profile = process.env.NOTARY_PROFILE || 'apple-notary') {
+  if (!dmg || path.extname(dmg).toLowerCase() !== '.dmg' || !statSync(dmg).isFile()) {
+    throw new Error('[notarize-dmg] expected the current release .dmg file path.');
+  }
   console.log(`[notarize-dmg] submitting "${dmg}" via profile "${profile}" (waits on Apple)...`);
   execFileSync('xcrun', ['notarytool', 'submit', dmg, '--keychain-profile', profile, '--wait'], { stdio: 'inherit' });
   console.log(`[notarize-dmg] stapling "${dmg}"...`);
   execFileSync('xcrun', ['stapler', 'staple', dmg], { stdio: 'inherit' });
+  console.log('[notarize-dmg] done.');
 }
-console.log('[notarize-dmg] done.');
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  notarizeDmg(process.argv[2]);
+}

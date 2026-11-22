@@ -1,12 +1,16 @@
-import { renderHook } from '@testing-library/react';
-import { act } from 'react';
+import { render, renderHook, waitFor, fireEvent, screen } from '@testing-library/react';
+import { App } from '../App';
+import { act, createElement, useEffect, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { midiToFrequency } from '../music/notes';
 import { usePianoAudio } from './usePianoAudio';
+import { createNoteStore } from '../input/noteStore';
 
 // A recording AudioContext so we can assert on the exact values written to the graph, not just
 // that nodes were constructed. (It stays local to this file rather than living in the shared
 // src/test/setup.ts because only these tests need the per-instance registries.)
+vi.mock('../components/StaffNotation', () => ({ StaffNotation: () => null }));
+
 const contexts: RecordingContext[] = [];
 const gains: RecordingGain[] = [];
 const oscillators: RecordingOscillator[] = [];
@@ -18,6 +22,7 @@ let initialState: AudioContextState = 'running';
 class RecordingParam {
   value = 0;
   cancelScheduledValues = vi.fn();
+  cancelAndHoldAtTime = vi.fn();
   setTargetAtTime = vi.fn((value: number) => { this.value = value; });
   setValueAtTime = vi.fn((value: number) => { this.value = value; });
   exponentialRampToValueAtTime = vi.fn((value: number) => { this.value = value; });
@@ -104,6 +109,17 @@ const masterGain = () => gains[0];
 /** Then the per-voice envelope gain, then that voice's harmonic mix gain. */
 const voiceGain = (index = 0) => gains[1 + index * 2];
 
+function useSnapshotPianoAudio(notes: number[], volume: number, muted: boolean) {
+  const [store] = useState(createNoteStore);
+  usePianoAudio(store, volume, muted);
+  useEffect(() => {
+    for (const note of store.getSnapshot()) {
+      if (!notes.includes(note)) store.noteOff(note, 'test');
+    }
+    for (const note of notes) store.noteOn(note, 'test');
+  }, [notes, store]);
+}
+
 describe('usePianoAudio', () => {
   beforeEach(() => {
     contexts.length = 0;
@@ -120,7 +136,7 @@ describe('usePianoAudio', () => {
   });
 
   it('starts a two-oscillator voice tuned to the note and its octave', () => {
-    renderHook(({ notes }) => usePianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
+    renderHook(({ notes }) => useSnapshotPianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
 
     expect(oscillators).toHaveLength(2);
 
@@ -135,7 +151,7 @@ describe('usePianoAudio', () => {
   });
 
   it('routes voices through a shared master gain and limiter instead of straight to the destination', () => {
-    renderHook(() => usePianoAudio([60], 0.5, false));
+    renderHook(() => useSnapshotPianoAudio([60], 0.5, false));
 
     const context = contexts[0];
     expect(compressors).toHaveLength(1);
@@ -147,7 +163,7 @@ describe('usePianoAudio', () => {
   });
 
   it('applies the master headroom to the user volume', () => {
-    renderHook(() => usePianoAudio([60], 0.5, false));
+    renderHook(() => useSnapshotPianoAudio([60], 0.5, false));
 
     // 0.5 volume * 0.28 headroom. A stacked ten-note voicing would clip without this attenuation.
     expect(masterGain().gain.value).toBeCloseTo(0.14, 6);
@@ -155,7 +171,7 @@ describe('usePianoAudio', () => {
   });
 
   it('is silent when a note starts while muted', () => {
-    renderHook(() => usePianoAudio([60], 0.5, true));
+    renderHook(() => useSnapshotPianoAudio([60], 0.5, true));
 
     expect(oscillators).toHaveLength(2);
     expect(masterGain().gain.value).toBe(0);
@@ -163,7 +179,7 @@ describe('usePianoAudio', () => {
   });
 
   it('ramps the output to zero when muted mid-chord', () => {
-    const { rerender } = renderHook(({ muted }) => usePianoAudio([60], 0.5, muted), { initialProps: { muted: false } });
+    const { rerender } = renderHook(({ muted }) => useSnapshotPianoAudio([60], 0.5, muted), { initialProps: { muted: false } });
 
     act(() => rerender({ muted: true }));
 
@@ -172,7 +188,7 @@ describe('usePianoAudio', () => {
   });
 
   it('changes volume without re-attacking or rescheduling held voices', () => {
-    const { rerender } = renderHook(({ volume }) => usePianoAudio([60], volume, false), { initialProps: { volume: 0.5 } });
+    const { rerender } = renderHook(({ volume }) => useSnapshotPianoAudio([60], volume, false), { initialProps: { volume: 0.5 } });
 
     const envelope = voiceGain().gain;
     const envelopeWritesAfterAttack = envelope.setTargetAtTime.mock.calls.length;
@@ -188,7 +204,7 @@ describe('usePianoAudio', () => {
   });
 
   it('gives the voice a unit-scaled attack/decay envelope', () => {
-    renderHook(() => usePianoAudio([60], 0.5, false));
+    renderHook(() => useSnapshotPianoAudio([60], 0.5, false));
 
     const envelope = voiceGain().gain;
     expect(envelope.setValueAtTime).toHaveBeenCalledWith(0.0001, 0);
@@ -198,7 +214,7 @@ describe('usePianoAudio', () => {
 
   it('stops the oscillators after the note is released', () => {
     vi.useFakeTimers();
-    const { rerender } = renderHook(({ notes }) => usePianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
+    const { rerender } = renderHook(({ notes }) => useSnapshotPianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
 
     act(() => rerender({ notes: [] }));
     expect(oscillators[0].stop).not.toHaveBeenCalled();
@@ -212,7 +228,7 @@ describe('usePianoAudio', () => {
 
   it('retriggering inside the release window keeps the new voice alive', () => {
     vi.useFakeTimers();
-    const { rerender } = renderHook(({ notes }) => usePianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
+    const { rerender } = renderHook(({ notes }) => useSnapshotPianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
 
     act(() => rerender({ notes: [] }));
     act(() => rerender({ notes: [60] }));
@@ -226,7 +242,7 @@ describe('usePianoAudio', () => {
 
   it('tears voices down and closes the context on unmount without leaving timers pending', () => {
     vi.useFakeTimers();
-    const { unmount } = renderHook(() => usePianoAudio([60], 0.5, false));
+    const { unmount } = renderHook(() => useSnapshotPianoAudio([60], 0.5, false));
     const context = contexts[0];
 
     unmount();
@@ -239,7 +255,7 @@ describe('usePianoAudio', () => {
 
   it('clears the pending release timer on unmount', () => {
     vi.useFakeTimers();
-    const { rerender, unmount } = renderHook(({ notes }) => usePianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
+    const { rerender, unmount } = renderHook(({ notes }) => useSnapshotPianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
 
     act(() => rerender({ notes: [] }));
     expect(vi.getTimerCount()).toBe(1);
@@ -251,7 +267,7 @@ describe('usePianoAudio', () => {
 
   it('primes the audio context from a user gesture before any note arrives', () => {
     initialState = 'suspended';
-    renderHook(() => usePianoAudio([], 0.5, false));
+    renderHook(() => useSnapshotPianoAudio([], 0.5, false));
 
     expect(contexts).toHaveLength(0);
 
@@ -264,7 +280,7 @@ describe('usePianoAudio', () => {
   });
 
   it('re-resumes the context when the OS suspends it', () => {
-    renderHook(() => usePianoAudio([60], 0.5, false));
+    renderHook(() => useSnapshotPianoAudio([60], 0.5, false));
 
     const context = contexts[0];
     context.state = 'suspended';
@@ -272,4 +288,69 @@ describe('usePianoAudio', () => {
 
     expect(context.resume).toHaveBeenCalled();
   });
+
+  it('holds the instantaneous envelope value when released during its attack', () => {
+    const { rerender } = renderHook(({ notes }) => useSnapshotPianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
+    contexts[0].currentTime = 0.009;
+    rerender({ notes: [] });
+    const envelope = voiceGain().gain;
+    expect(envelope.cancelAndHoldAtTime).toHaveBeenCalledWith(0.009);
+    expect(envelope.cancelAndHoldAtTime.mock.invocationCallOrder[0]).toBeLessThan(envelope.setTargetAtTime.mock.invocationCallOrder.at(-1)!);
+    expect(envelope.setTargetAtTime).toHaveBeenLastCalledWith(0.0001, 0.009, 0.045);
+  });
+
+  it('preserves the analytic attack value when cancelAndHoldAtTime is unavailable', () => {
+    const { rerender } = renderHook(({ notes }) => useSnapshotPianoAudio(notes, 0.5, false), { initialProps: { notes: [60] } });
+    const envelope = voiceGain().gain;
+    Object.defineProperty(envelope, 'cancelAndHoldAtTime', { value: undefined });
+    contexts[0].currentTime = 0.009;
+    rerender({ notes: [] });
+    expect(envelope.cancelScheduledValues).toHaveBeenCalledWith(0.009);
+    expect(envelope.setValueAtTime).toHaveBeenLastCalledWith(0.01, 0.009);
+    expect(envelope.setTargetAtTime).toHaveBeenLastCalledWith(0.0001, 0.009, 0.045);
+  });
+
+  async function midiApp() {
+    const input = { id: 'A', name: 'Keys', state: 'connected', onmidimessage: null as ((event: MIDIMessageEvent) => void) | null };
+    Object.defineProperty(navigator, 'requestMIDIAccess', { configurable: true, value: vi.fn(async () => ({ inputs: new Map([['A', input]]), onstatechange: null })) });
+    window.localStorage.clear();
+    render(createElement(App));
+    await waitFor(() => expect(input.onmidimessage).toBeTypeOf('function'));
+    return (data: number[]) => input.onmidimessage?.({ data: new Uint8Array(data) } as MIDIMessageEvent);
+  }
+
+  it('re-attacks MIDI notes released and pressed again inside one React batch', async () => {
+    const send = await midiApp();
+    act(() => send([0x90, 60, 100]));
+    expect(oscillators).toHaveLength(2);
+    act(() => { send([0x80, 60, 0]); send([0x90, 60, 100]); });
+    expect(oscillators).toHaveLength(4);
+    expect(voiceGain().gain.setTargetAtTime).toHaveBeenLastCalledWith(0.0001, 0, 0.045);
+  });
+
+  it('sounds a complete MIDI tap delivered in one batch and panic releases all sources', async () => {
+    const send = await midiApp();
+    act(() => { send([0x90, 60, 100]); send([0x80, 60, 0]); });
+    expect(oscillators).toHaveLength(2);
+    expect(voiceGain().gain.setTargetAtTime).toHaveBeenLastCalledWith(0.0001, 0, 0.045);
+    act(() => send([0x90, 64, 100]));
+    fireEvent.keyDown(window, { code: 'KeyA' });
+    fireEvent.click(screen.getByRole('button', { name: /All notes off/ }));
+    expect(voiceGain(1).gain.setTargetAtTime).toHaveBeenLastCalledWith(0.0001, 0, 0.045);
+    expect(voiceGain(2).gain.setTargetAtTime).toHaveBeenLastCalledWith(0.0001, 0, 0.045);
+    act(() => send([0x90, 67, 100]));
+    fireEvent.keyDown(window, { code: 'Escape' });
+    expect(voiceGain(3).gain.setTargetAtTime).toHaveBeenLastCalledWith(0.0001, 0, 0.045);
+  });
+
+  it('does not release or re-attack a pitch while another MIDI channel still holds it', async () => {
+    const send = await midiApp();
+    act(() => { send([0x90, 60, 100]); send([0x91, 60, 100]); });
+    expect(oscillators).toHaveLength(2);
+    act(() => send([0x80, 60, 0]));
+    expect(voiceGain().gain.setTargetAtTime).toHaveBeenLastCalledWith(0.68, 0.08, 0.32);
+    act(() => send([0x81, 60, 0]));
+    expect(voiceGain().gain.setTargetAtTime).toHaveBeenLastCalledWith(0.0001, 0, 0.045);
+  });
+
 });

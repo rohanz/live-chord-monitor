@@ -142,3 +142,28 @@ describe('useComputerKeyboard', () => {
     expect(onNoteOn).not.toHaveBeenCalled();
   });
 });
+
+it('releases tracked notes on Command transitions even without blur or note keyup', () => {
+  const on = vi.fn();
+  const off = vi.fn();
+  renderHook(() => useComputerKeyboard(true, 60, on, off));
+  fireEvent.keyDown(window, { code: 'KeyA' });
+  fireEvent.keyDown(window, { code: 'MetaLeft', key: 'Meta', metaKey: true });
+  // macOS suppresses KeyA keyup while Command is held.
+  fireEvent.keyUp(window, { code: 'MetaLeft', key: 'Meta' });
+  expect(off).toHaveBeenCalledWith(60, 'keyboard:KeyA');
+  fireEvent.keyDown(window, { code: 'KeyA' });
+  expect(on).toHaveBeenCalledTimes(2);
+});
+
+it('forgets suppressed keyups on Command transitions while disabled', () => {
+  const on = vi.fn();
+  const { rerender } = renderHook(({ enabled }) => useComputerKeyboard(enabled, 60, on, vi.fn()), { initialProps: { enabled: true } });
+  fireEvent.keyDown(window, { code: 'KeyA' });
+  rerender({ enabled: false });
+  fireEvent.keyDown(window, { code: 'MetaLeft', key: 'Meta', metaKey: true });
+  fireEvent.keyUp(window, { code: 'MetaLeft', key: 'Meta' });
+  on.mockClear();
+  rerender({ enabled: true });
+  expect(on).not.toHaveBeenCalled();
+});

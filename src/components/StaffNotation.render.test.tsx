@@ -224,6 +224,30 @@ describe('StaffNotation rendering', () => {
     });
   });
 
+  it.each([[21], [108], [21, 108]])('fits ledger-note bounds for %j inside the SVG viewport', (...notes) => {
+    stubContainerSize(640, 242);
+    const { container } = render(<StaffNotation notes={notes} chord={null} fading={false} />);
+    const svg = svgOf(container);
+    const [, top, , height] = svg.getAttribute('viewBox')!.split(/\s+/).map(Number);
+    const glyphs = Array.from(svg.querySelectorAll('.vf-notehead text'));
+    expect(glyphs).toHaveLength(notes.length);
+    for (const glyph of glyphs) {
+      const y = Number(glyph.getAttribute('y'));
+      // Whole-note glyphs extend above and below their baseline; reserve real drawing space.
+      expect(y - 8).toBeGreaterThanOrEqual(top);
+      expect(y + 8).toBeLessThanOrEqual(top + height);
+    }
+  });
+
+  it('preserves the original viewport and note positions for a mid-range chord', () => {
+    stubContainerSize(640, 242);
+    const { container } = render(<StaffNotation notes={[48, 60, 64, 67]} chord={null} fading={false} />);
+    const svg = svgOf(container);
+    expect(svg.getAttribute('viewBox')).toBe('0 0 640 242');
+    expect(Array.from(svg.querySelectorAll('.vf-notehead text')).map((glyph) => Number(glyph.getAttribute('y'))))
+      .toEqual([109, 99, 89, 186]);
+  });
+
   it('applies the fading class to the surface', () => {
     const { container, rerender } = render(
       <StaffNotation notes={[60]} chord={null} fading={false} />,

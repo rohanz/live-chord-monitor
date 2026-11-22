@@ -8,7 +8,7 @@ export function isTextEditingTarget(target: EventTarget | null): boolean {
     return false;
   }
 
-  if (target.closest('textarea, select, [contenteditable="true"]')) {
+  if (target.isContentEditable || target.closest('textarea, select')) {
     return true;
   }
 
@@ -26,7 +26,7 @@ export function isTextEntryTarget(target: EventTarget | null): boolean {
     return false;
   }
 
-  if (target.closest('textarea, [contenteditable="true"]')) {
+  if (target.isContentEditable || target.closest('textarea')) {
     return true;
   }
 

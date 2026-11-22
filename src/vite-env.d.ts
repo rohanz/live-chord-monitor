@@ -3,6 +3,9 @@
 interface Window {
   liveChordMonitor?: {
     platform: string;
+    toggleFullScreen?: () => Promise<boolean>;
+    isFullScreen?: () => Promise<boolean>;
+    onFullScreenChange?: (callback: (isFullScreen: boolean) => void) => () => void;
   };
 }
 

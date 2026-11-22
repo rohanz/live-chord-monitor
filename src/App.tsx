@@ -1,15 +1,18 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, CircleHelp, Music2, SlidersHorizontal, Volume2, VolumeX } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Volume2, VolumeX } from 'lucide-react';
 import { PianoKeyboard, RangeOverview } from './components/PianoKeyboard';
 import { StaffNotation } from './components/StaffNotation';
+import { spelledNoteName } from './music/spelling';
 import { SettingsDrawer } from './components/SettingsDrawer';
 import { HelpDrawer } from './components/HelpDrawer';
 import { usePianoAudio } from './audio/usePianoAudio';
+import { createNoteStore } from './input/noteStore';
 import { detectChord, type ChordNameStyle, type InversionMode } from './music/chords';
 import { clampMidiStart, keyPrefersFlats, midiNoteName, type SpellingKey } from './music/notes';
 import { useComputerKeyboard } from './hooks/useComputerKeyboard';
-import { useMidiInputs } from './hooks/useMidiInputs';
+import { defaultMidiInputEnabled, useMidiInputs, type MidiDeviceInfo } from './hooks/useMidiInputs';
 import { useDisplayNotes, FADE_OUT_MS } from './hooks/useDisplayNotes';
+import { useFullScreen } from './hooks/useFullScreen';
 import { isBoolean, numberInRange, oneOf, usePersistentState } from './hooks/usePersistentState';
 import { toAccidentalGlyphs } from './utils/accidentals';
 import { isTextEntryTarget } from './utils/textEditingTarget';
@@ -28,7 +31,6 @@ const COMPUTER_KEY_BASE = 60;
 const MIN_KEYBOARD_BASE = 36;
 const MAX_KEYBOARD_BASE = 84;
 const DEFAULT_VOLUME = 0.72;
-const EMPTY_NOTES: number[] = [];
 
 // Validators are hoisted so each is a stable identity across renders.
 const isVolume = numberInRange(MIN_VOLUME, MAX_VOLUME);
@@ -37,11 +39,16 @@ const isNameStyle = oneOf(NAME_STYLES);
 const isInversionMode = oneOf(INVERSION_MODES);
 const isSpellingKey = oneOf(SPELLING_KEY_OPTIONS);
 
-type HeldSources = Record<number, string[]>;
+/** Separate ID-keyed switches from legacy name preferences, which may be ambiguous. */
+const isMidiInputOverrides = (value: unknown): value is Record<string, boolean> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value)
+  && Object.values(value).every((entry) => typeof entry === 'boolean');
+
 type OpenDrawer = 'help' | 'settings' | null;
 
 export function App() {
-  const [heldSources, setHeldSources] = useState<HeldSources>({});
+  const [noteStore] = useState(createNoteStore);
+  const activeNotes = useSyncExternalStore(noteStore.subscribe, noteStore.getSnapshot);
   const [rangeStart, setRangeStart] = useState(DEFAULT_START);
   const [computerKeyBase, setComputerKeyBase] = useState(COMPUTER_KEY_BASE);
   // One drawer at a time: Help and Settings occupy the exact same fixed slot, so two independent
@@ -60,49 +67,16 @@ export function App() {
   const [spellingKey, setSpellingKey] = usePersistentState<SpellingKey>('lcm:spellingKey', 'C', isSpellingKey);
   const [lingerMs, setLingerMs] = usePersistentState('lcm:lingerMs', 500, isLingerMs);
   const [computerKeyboardNotes, setComputerKeyboardNotes] = usePersistentState('lcm:computerKeyboardNotes', true, isBoolean);
-
-  // Keyed on note CONTENT, not on `heldSources` identity: a refcount-only change
-  // (second source added/removed for an already-held note) must not hand VexFlow a
-  // new array and force a full staff teardown/rebuild.
-  const activeNotesKey = useMemo(() => (
-    Object.entries(heldSources)
-      .filter(([, sources]) => sources.length > 0)
-      .map(([note]) => Number(note))
-      .sort((a, b) => a - b)
-      .join(',')
-  ), [heldSources]);
-
-  const activeNotes = useMemo(() => (
-    activeNotesKey === '' ? EMPTY_NOTES : activeNotesKey.split(',').map(Number)
-  ), [activeNotesKey]);
+  const [legacyMidiInputOverrides] = usePersistentState<Record<string, boolean>>('lcm:midiInputOverrides', {}, isMidiInputOverrides);
+  const [midiInputOverrides, setMidiInputOverrides] = usePersistentState<Record<string, boolean>>('lcm:midiInputOverridesById', {}, isMidiInputOverrides);
 
   const activeNoteSet = useMemo(() => new Set(activeNotes), [activeNotes]);
   const preferFlats = keyPrefersFlats(spellingKey);
   const { displayNotes, fading } = useDisplayNotes(activeNotes, lingerMs);
   const chord = useMemo(() => detectChord(displayNotes, nameStyle, inversionMode, preferFlats), [displayNotes, inversionMode, nameStyle, preferFlats]);
 
-  const handleNoteOn = useCallback((note: number, source: string) => {
-    setHeldSources((current) => {
-      const nextSources = new Set(current[note] ?? []);
-      nextSources.add(source);
-      return { ...current, [note]: Array.from(nextSources) };
-    });
-  }, []);
-
-  const handleNoteOff = useCallback((note: number, source: string) => {
-    setHeldSources((current) => {
-      const nextSources = new Set(current[note] ?? []);
-      nextSources.delete(source);
-
-      if (nextSources.size === 0) {
-        const rest = { ...current };
-        delete rest[note];
-        return rest;
-      }
-
-      return { ...current, [note]: Array.from(nextSources) };
-    });
-  }, []);
+  const handleNoteOn = noteStore.noteOn;
+  const handleNoteOff = noteStore.noteOff;
 
   const setVisibleRangeStart = useCallback((nextStart: number) => {
     const clampedStart = clampMidiStart(nextStart, VISIBLE_SEMITONES);
@@ -118,8 +92,19 @@ export function App() {
     setRangeStart(clampMidiStart(next - 12, VISIBLE_SEMITONES));
   }, [computerKeyBase]);
 
+  // Panic: drop every held source. Safe against hardware that is still physically held, because a
+  // later note-off for a source that is no longer present is a no-op in handleNoteOff.
+  const releaseAllNotes = noteStore.clear;
+
   useEffect(() => {
     function handleGlobalShortcut(event: KeyboardEvent) {
+      // Escape inside a drawer closes it and stops propagation there, so it only reaches this
+      // listener when no drawer control has focus.
+      if (event.code === 'Escape' && !event.repeat && !isTextEntryTarget(event.target)) {
+        releaseAllNotes();
+        return;
+      }
+
       // Z/X are range controls, deliberately available even while a settings
       // control has focus; only literal text entry swallows them.
       if (isTextEntryTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey || event.repeat) {
@@ -139,11 +124,39 @@ export function App() {
 
     window.addEventListener('keydown', handleGlobalShortcut);
     return () => window.removeEventListener('keydown', handleGlobalShortcut);
-  }, [shiftComputerOctave]);
+  }, [releaseAllNotes, shiftComputerOctave]);
 
-  const midi = useMidiInputs(handleNoteOn, handleNoteOff);
+  // IDs identify individual endpoints, including two identical (or unnamed) keyboards.
+  // A legacy name preference is safe to migrate only when enumeration has one such name.
+  const isMidiInputEnabled = useCallback((device: MidiDeviceInfo, devices: MidiDeviceInfo[]) => {
+    if (Object.hasOwn(midiInputOverrides, device.id)) return midiInputOverrides[device.id];
+    if (Object.hasOwn(legacyMidiInputOverrides, device.name)
+      && devices.filter((input) => input.name === device.name).length === 1) {
+      return legacyMidiInputOverrides[device.name];
+    }
+    return defaultMidiInputEnabled(device);
+  }, [legacyMidiInputOverrides, midiInputOverrides]);
+
+  const setMidiDeviceEnabled = useCallback((id: string, enabled: boolean) => {
+    setMidiInputOverrides((current) => ({ ...current, [id]: enabled }));
+  }, [setMidiInputOverrides]);
+
+  const midi = useMidiInputs(handleNoteOn, handleNoteOff, isMidiInputEnabled);
+  useEffect(() => {
+    setMidiInputOverrides((current) => {
+      const migrated = { ...current };
+      for (const device of midi.devices) {
+        if (!Object.hasOwn(current, device.id) && Object.hasOwn(legacyMidiInputOverrides, device.name)
+          && midi.devices.filter((input) => input.name === device.name).length === 1) {
+          migrated[device.id] = legacyMidiInputOverrides[device.name];
+        }
+      }
+      return Object.keys(migrated).length === Object.keys(current).length ? current : migrated;
+    });
+  }, [legacyMidiInputOverrides, midi.devices, setMidiInputOverrides]);
   useComputerKeyboard(computerKeyboardNotes, computerKeyBase, handleNoteOn, handleNoteOff);
-  usePianoAudio(activeNotes, volume, muted);
+  usePianoAudio(noteStore, volume, muted);
+  const { isFullScreen, toggleFullScreen, supported: fullScreenSupported } = useFullScreen();
 
   const rangeEnd = rangeStart + VISIBLE_SEMITONES;
 
@@ -151,14 +164,20 @@ export function App() {
     setVisibleRangeStart(rangeStart + semitones);
   }
 
+  const heldNoteNames = displayNotes.length > 0
+    ? displayNotes.map((note) => toAccidentalGlyphs(spelledNoteName(note, chord.primary, preferFlats))).join('  ')
+    : '\u2014';
+  const computerKeyRange = `${toAccidentalGlyphs(midiNoteName(computerKeyBase, preferFlats))} \u2013 ${toAccidentalGlyphs(midiNoteName(computerKeyBase + 14, preferFlats))}`;
+  const isMac = window.liveChordMonitor?.platform === 'darwin';
+
   return (
-    <main className="app-shell">
-      <section className="app-chrome">
-        <div className="header-left">
-          <div className="app-title">Live Chord Monitor</div>
+    <main className={`app-shell ${isMac ? 'is-mac-window' : ''} ${isFullScreen ? 'is-full-screen' : ''} ${openDrawer ? 'has-drawer' : ''}`}>
+      <header className="topbar">
+        <div className="topbar-left">
+          <div className="wordmark">live chord monitor</div>
           <div className="status-cluster" aria-label="Input status">
-            <div className={`status-pill status-${midi.status}`}>
-              <Music2 size={16} />
+            <div className={`status-pill status-${midi.status === 'ready' && midi.devices.length === 0 ? 'idle' : midi.status}`}>
+              <span className="status-dot" aria-hidden="true" />
               <span>{formatMidiStatus(midi.status, midi.devices.length)}</span>
             </div>
           </div>
@@ -167,7 +186,7 @@ export function App() {
         <section className="control-strip" aria-label="Controls">
           <div className="control-group">
             <button className={`mute-button ${muted ? 'is-muted' : ''}`} type="button" onClick={() => setMuted((value) => !value)}>
-              {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+              {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
               <span>{muted ? 'Muted' : 'Sound'}</span>
             </button>
             <input
@@ -177,6 +196,7 @@ export function App() {
               max={1}
               step={0.01}
               value={volume}
+              style={{ '--fill': `${volume * 100}%` } as React.CSSProperties}
               onChange={(event) => setVolume(Number(event.target.value))}
               onDoubleClick={() => setVolume(DEFAULT_VOLUME)}
               aria-label="Volume"
@@ -190,7 +210,6 @@ export function App() {
               aria-expanded={openDrawer === 'help'}
               onClick={() => setOpenDrawer('help')}
             >
-              <CircleHelp size={18} />
               <span>Help</span>
             </button>
             <button
@@ -199,39 +218,84 @@ export function App() {
               aria-expanded={openDrawer === 'settings'}
               onClick={() => setOpenDrawer('settings')}
             >
-              <SlidersHorizontal size={18} />
               <span>Settings</span>
             </button>
+            {fullScreenSupported ? (
+              <button
+                className="icon-button fullscreen-button"
+                type="button"
+                aria-pressed={isFullScreen}
+                aria-label={isFullScreen ? 'Exit full screen' : 'Enter full screen'}
+                title={isFullScreen ? 'Exit full screen' : 'Full screen'}
+                onClick={toggleFullScreen}
+              >
+                {isFullScreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+              </button>
+            ) : null}
           </div>
         </section>
-      </section>
+      </header>
 
-      <section className="readout-area">
-        <div
-          className={`chord-readout ${fading ? 'is-fading' : ''}`}
-          style={{ '--fade-duration': `${FADE_OUT_MS}ms` } as React.CSSProperties}
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          <h1>{chord.primary ? toAccidentalGlyphs(chord.primary.displayName) : ''}</h1>
-          <div className="alternatives">
-            {chord.alternatives.length > 0
-              ? chord.alternatives.map((candidate) => toAccidentalGlyphs(candidate.displayName)).join('  |  ')
-              : ''}
+      <div className="stage">
+        <aside className="rail" aria-label="Session">
+          <div className="rail-cell">
+            <span className="cell-label">Notes</span>
+            <p className={`rail-value rail-notes ${fading ? 'is-fading' : ''}`}>{heldNoteNames}</p>
           </div>
-        </div>
-
-        <div className="work-area">
-          {notationEnabled ? (
-            <StaffNotation notes={displayNotes} chord={chord.primary} fading={fading} />
-          ) : (
-            <div className="notation-disabled">
-              <Music2 size={22} />
-              <span>Notation hidden</span>
+          <div className="rail-cell">
+            <span className="cell-label">Visible range</span>
+            <p className="rail-value">{`${toAccidentalGlyphs(midiNoteName(rangeStart, preferFlats))} \u2013 ${toAccidentalGlyphs(midiNoteName(rangeEnd, preferFlats))}`}</p>
+          </div>
+          {computerKeyboardNotes ? (
+            <div className="rail-cell">
+              <span className="cell-label">Computer keys</span>
+              <p className="rail-value">{computerKeyRange}</p>
             </div>
-          )}
-        </div>
-      </section>
+          ) : null}
+          <div className="rail-spacer" />
+          <button
+            className="panic-button"
+            type="button"
+            onClick={releaseAllNotes}
+            title="Release every held note (Esc)"
+          >
+            <span>All notes off</span>
+            <kbd>esc</kbd>
+          </button>
+        </aside>
+
+        <section className="readout-area">
+          <div className="field-cell chord-cell">
+            <span className="cell-label">Chord</span>
+            <div
+              className={`chord-readout ${fading ? 'is-fading' : ''}`}
+              style={{ '--fade-duration': `${FADE_OUT_MS}ms` } as React.CSSProperties}
+              aria-live="polite"
+              aria-atomic="true"
+            >
+              <h1>{chord.primary ? toAccidentalGlyphs(chord.primary.displayName) : ''}</h1>
+              <div className="alternatives">
+                {chord.alternatives.length > 0
+                  ? chord.alternatives.map((candidate) => toAccidentalGlyphs(candidate.displayName)).join('   /   ')
+                  : ''}
+              </div>
+            </div>
+          </div>
+
+          <div className="field-cell staff-cell">
+            <span className="cell-label">Notation</span>
+            <div className="work-area">
+              {notationEnabled ? (
+                <StaffNotation notes={displayNotes} chord={chord.primary} fading={fading} />
+              ) : (
+                <div className="notation-disabled">
+                  <span>Notation hidden</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      </div>
 
       <section className="keyboard-section">
         <PianoKeyboard
@@ -240,12 +304,12 @@ export function App() {
           activeNotes={activeNoteSet}
           showPressedLabels={showPressedLabels}
           preferFlats={preferFlats}
-          onPointerNoteOn={(note) => handleNoteOn(note, `pointer:${note}`)}
-          onPointerNoteOff={(note) => handleNoteOff(note, `pointer:${note}`)}
+          onPointerNoteOn={(note, pointerId) => handleNoteOn(note, `pointer:${pointerId}:${note}`)}
+          onPointerNoteOff={(note, pointerId) => handleNoteOff(note, `pointer:${pointerId}:${note}`)}
         />
         <div className="range-controls">
           <button className="icon-button" type="button" onClick={() => shiftRange(-12)} aria-label="Shift visible keyboard down one octave">
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} />
           </button>
           <span className="range-end-label">{toAccidentalGlyphs(midiNoteName(rangeStart, preferFlats))}</span>
           <div className="keyboard-range-slider">
@@ -263,7 +327,7 @@ export function App() {
           </div>
           <span className="range-end-label">{toAccidentalGlyphs(midiNoteName(rangeEnd, preferFlats))}</span>
           <button className="icon-button" type="button" onClick={() => shiftRange(12)} aria-label="Shift visible keyboard up one octave">
-            <ChevronRight size={18} />
+            <ChevronRight size={16} />
           </button>
         </div>
       </section>
@@ -287,6 +351,8 @@ export function App() {
           onComputerKeyboardNotesChange={setComputerKeyboardNotes}
           lingerMs={lingerMs}
           onLingerMsChange={setLingerMs}
+          midiDevices={midi.devices.map((device) => ({ ...device, enabled: isMidiInputEnabled(device, midi.devices) }))}
+          onMidiDeviceEnabledChange={setMidiDeviceEnabled}
         />
       ) : null}
     </main>

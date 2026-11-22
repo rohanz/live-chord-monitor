@@ -9,8 +9,8 @@ type PianoKeyboardProps = {
   activeNotes: Set<number>;
   showPressedLabels: boolean;
   preferFlats: boolean;
-  onPointerNoteOn?: (note: number) => void;
-  onPointerNoteOff?: (note: number) => void;
+  onPointerNoteOn?: (note: number, pointerId: number) => void;
+  onPointerNoteOff?: (note: number, pointerId: number) => void;
 };
 
 export function PianoKeyboard({
@@ -43,7 +43,7 @@ export function PianoKeyboard({
     }
 
     pointerNotesRef.current.delete(pointerId);
-    noteOffRef.current?.(note);
+    noteOffRef.current?.(note, pointerId);
   }, []);
 
   useEffect(() => {
@@ -53,18 +53,25 @@ export function PianoKeyboard({
       releasePointer(event.pointerId);
     }
 
+    function releaseAll() {
+      for (const pointerId of held.keys()) releasePointer(pointerId);
+    }
+    function releaseHidden() {
+      if (document.visibilityState === 'hidden') releaseAll();
+    }
+
+    window.addEventListener('blur', releaseAll);
+    document.addEventListener('visibilitychange', releaseHidden);
     window.addEventListener('pointerup', handleWindowPointerEnd);
     window.addEventListener('pointercancel', handleWindowPointerEnd);
 
     return () => {
+      window.removeEventListener('blur', releaseAll);
+      document.removeEventListener('visibilitychange', releaseHidden);
       window.removeEventListener('pointerup', handleWindowPointerEnd);
       window.removeEventListener('pointercancel', handleWindowPointerEnd);
 
-      for (const note of held.values()) {
-        noteOffRef.current?.(note);
-      }
-
-      held.clear();
+      releaseAll();
     };
   }, [releasePointer]);
 
@@ -82,11 +89,12 @@ export function PianoKeyboard({
     return {
       onPointerDown: (event: PointerEvent<HTMLElement>) => {
         event.preventDefault();
+        releasePointer(event.pointerId);
         // Capture keeps the press bound to the key it started on (no glissando);
         // see the note in AGENTS.md on why drag-across is deliberately not supported.
         event.currentTarget.setPointerCapture?.(event.pointerId);
         pointerNotesRef.current.set(event.pointerId, note);
-        onPointerNoteOn?.(note);
+        onPointerNoteOn?.(note, event.pointerId);
       },
       onPointerUp: (event: PointerEvent<HTMLElement>) => {
         event.preventDefault();

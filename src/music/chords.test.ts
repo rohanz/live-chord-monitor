@@ -2,15 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { detectChord, inversionOrdinalIndex } from './chords';
 
 describe('inversionOrdinalIndex', () => {
-  it('returns the 1-based inversion ordinal when the bass is a chord tone', () => {
-    expect(inversionOrdinalIndex(4, [4, 7])).toBe(1);
-    expect(inversionOrdinalIndex(7, [4, 7])).toBe(2);
-    expect(inversionOrdinalIndex(7, [3, 7, 10])).toBe(2);
+  it('derives the ordinal from the written degree, independent of other tones', () => {
+    expect(inversionOrdinalIndex(2)).toBe(1);
+    expect(inversionOrdinalIndex(4)).toBe(2);
+    expect(inversionOrdinalIndex(6)).toBe(3);
   });
 
-  it('returns null when the bass is not one of the chord tones', () => {
-    expect(inversionOrdinalIndex(1, [4, 7])).toBeNull();
-    expect(inversionOrdinalIndex(9, [4, 7])).toBeNull();
+  it('returns null for roots and tension degrees', () => {
+    for (const degree of [0, 1, 3, 5]) {
+      expect(inversionOrdinalIndex(degree)).toBeNull();
+    }
   });
 });
 
@@ -46,6 +47,12 @@ describe('detectChord', () => {
     expect(detectChord([64, 67, 72], 'maj', 'slash').primary?.displayName).toBe('C/E');
     expect(detectChord([64, 67, 72], 'maj', 'root-only').primary?.displayName).toBe('C');
     expect(detectChord([64, 67, 72], 'maj', 'full').primary?.displayName).toBe('C first inversion');
+  });
+
+  it('keeps inversion ordinals tied to degrees when thirds or fifths are absent', () => {
+    expect(detectChord([55, 60, 65, 70], 'maj', 'full').primary?.displayName).toBe('C7sus4 second inversion');
+    expect(detectChord([58, 60, 61, 63, 64, 68], 'maj', 'full').primary?.displayName).toBe('C7alt third inversion');
+    expect(detectChord([62, 64, 67, 70, 72], 'maj', 'full').primary?.displayName).toBe('C9/D');
   });
 
   it('spells notation accidentals from chord context', () => {
